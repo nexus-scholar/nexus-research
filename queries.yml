@@ -1,0 +1,121 @@
+version: 1
+project: lit_screener
+queries:
+  # -------------------------
+  # 1) Problem: domain shift / lab-to-field
+  # -------------------------
+  - id: DS01
+    theme: domain_shift
+    priority: high
+    query: >
+      ("domain shift" OR "dataset shift" OR "distribution shift" OR "domain discrepancy" OR
+      "covariate shift" OR "out-of-distribution" OR OOD OR "generalization gap")
+      AND ("plant disease" OR "leaf disease")
+      AND (PlantVillage OR PlantDoc OR PlantWild OR "in-field" OR "real-world" OR "field images")
+    include_any:
+      - PlantVillage
+      - PlantDoc
+      - PlantWild
+    exclude_any:
+      - "hyperspectral"
+      - "remote sensing"
+
+  - id: DS02
+    theme: domain_shift
+    priority: high
+    query: >
+      ("lab-to-field" OR "lab to field" OR "real-world deployment" OR "field deployment")
+      AND ("plant disease" OR "plant pathology")
+      AND (classification OR diagnosis OR detection)
+
+  - id: DS_GOLD
+    theme: domain_shift
+    priority: high
+    query: >
+      ("training on PlantVillage" OR "trained on PlantVillage")
+      AND ("testing on field" OR "test on field" OR "field dataset" OR PlantDoc OR PlantWild)
+      AND ("performance drop" OR "accuracy drop" OR degradation OR "generalization gap")
+
+  # -------------------------
+  # 2) Architecture: MobileNetV4 / MobileViT
+  # -------------------------
+  - id: ARCH01
+    theme: architecture_lightweight
+    priority: high
+    query: >
+      ("MobileNetV4" OR "MobileNet V4" OR "MobileNet-V4")
+      AND (agriculture OR "plant disease" OR "leaf disease" OR "plant pathology")
+
+  - id: ARCH02
+    theme: architecture_lightweight
+    priority: medium
+    query: >
+      ("MobileNet-GDR" OR ("MobileNet" AND "grape leaf disease"))
+      AND (lightweight OR edge OR mobile OR smartphone)
+
+  - id: ARCH03
+    theme: architecture_lightweight
+    priority: high
+    query: >
+      ("MobileViT" OR "MobileViT v2" OR "mobile vision transformer")
+      AND ("plant disease" OR "leaf disease")
+      AND (lightweight OR efficient OR edge OR mobile OR smartphone)
+
+  # -------------------------
+  # 3) Solution: distillation
+  # -------------------------
+  - id: KD01
+    theme: knowledge_distillation
+    priority: high
+    query: >
+      ("knowledge distillation" OR distillation OR "teacher-student" OR "student-teacher" OR "self-distillation")
+      AND ("plant disease" OR "leaf disease")
+      AND (mobile OR edge OR lightweight OR efficient)
+
+  - id: KD02
+    theme: knowledge_distillation
+    priority: medium
+    query: >
+      ("bidirectional knowledge distillation" OR "mutual learning" OR "online distillation")
+      AND ("plant disease" OR "plant pathology")
+
+  # -------------------------
+  # 4) Solution: active learning / human-in-the-loop
+  # -------------------------
+  - id: AL01
+    theme: active_learning
+    priority: high
+    query: >
+      ("active learning" OR "human-in-the-loop" OR "human in the loop" OR "uncertainty sampling" OR "query strategy")
+      AND ("plant disease" OR "leaf disease")
+      AND ("labeling cost" OR annotation OR "few labels" OR "limited labels")
+
+  # -------------------------
+  # 5) Data-centric: merging datasets / noisy labels
+  # -------------------------
+  - id: DC01
+    theme: data_centric
+    priority: high
+    query: >
+      ("data-centric" OR "data centric" OR "noisy labels" OR "label noise" OR "data cleaning")
+      AND ("plant disease" OR "plant pathology")
+      AND (dataset OR "training data" OR annotation)
+
+  - id: MERGE01
+    theme: dataset_engineering
+    priority: high
+    query: >
+      ("merged dataset" OR "merge datasets" OR "dataset merging" OR "combine datasets" OR "cross-dataset" OR "multi-source" OR heterogeneous)
+      AND ("plant disease" OR "plant pathology")
+      AND (classification OR diagnosis OR detection)
+
+  # -------------------------
+  # 6) Medical bridge: medical imaging techniques transferred to ag
+  # -------------------------
+  - id: MED01
+    theme: medical_bridge
+    priority: medium
+    query: >
+      ("medical imaging" OR radiology OR ultrasound OR dermoscopy OR histopathology OR "computer-aided diagnosis" OR CAD)
+      AND ("plant disease" OR "leaf disease")
+      AND (transfer OR adaptation OR "domain adaptation" OR "few-shot" OR "self-supervised")

@@ -1,0 +1,66 @@
+# Simple SLR Configuration File
+# =================================
+
+# Global Settings
+# ----------------
+# Email address used for polite API requests (highly recommended)
+# This allows providers to contact you if your scripts are causing issues
+# and often grants higher rate limits (e.g., OpenAlex, Crossref).
+mailto: "bekhouche.mouadh@univ-oeb.dz"
+
+# Default year range for all queries (can be overridden per query)
+year_min: 2024
+year_max: 2025
+
+# Default language filter (ISO 639-1 code)
+language: "en"
+
+# Provider Configuration
+# -----------------------
+# Enable/disable specific academic databases and configure their rate limits.
+providers:
+  openalex:
+    enabled: true
+    rate_limit: 5.0  # Requests per second (polite pool)
+    timeout: 30      # Request timeout in seconds
+
+  crossref:
+    enabled: false
+    rate_limit: 1.0  # Conservative default
+    timeout: 30
+
+  arxiv:
+    enabled: false
+    rate_limit: 0.5  # Recommended: 3 seconds per request
+    timeout: 30
+
+  # Semantic Scholar (alias: s2)
+  # Requires API key for higher rate limits, otherwise very restricted
+  s2:
+    enabled: true
+    rate_limit: 1.0
+
+# Deduplication Settings
+# -----------------------
+deduplication:
+  # Strategy: 'conservative' (exact match + strict title), 'semantic' (embeddings), 'hybrid'
+  # Note: 'semantic' and 'hybrid' require additional dependencies.
+  strategy: "conservative"
+
+  # Fuzzy matching threshold (0-100) for title similarity in conservative mode
+  fuzzy_threshold: 97
+
+  # Maximum allowed year difference between potential duplicates
+  max_year_gap: 1
+
+# Output Configuration
+# ---------------------
+output:
+  # Directory where results will be saved
+  directory: "results/outputs"
+
+  # Default output format: 'csv', 'jsonl', or 'both'
+  format: "csv"
+
+  # Include raw JSON response from providers in the output (increases file size)
+  include_raw: false

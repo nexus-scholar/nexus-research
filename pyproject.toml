@@ -1,0 +1,38 @@
+[project]
+name = "nexus-research"
+version = "0.1.0"
+description = "Nexus: AI Research Assistant for Systematic Literature Reviews."
+requires-python = ">=3.13"
+dependencies = [
+    # Core Nexus
+    "click>=8.0.0",
+    "pydantic>=2.0.0",
+    "requests>=2.30.0",
+    "rich>=13.0.0",
+    "PyYAML>=6.0",
+    
+    # PDF Extraction & Analysis
+    "chromadb>=0.4.0",
+    "fastapi>=0.115.0",
+    "openai>=1.0.0",
+    "pandas>=3.0.0",
+    "pymupdf==1.26.6",
+    "pymupdf-layout>=0.2.0",
+    "pymupdf4llm>=0.2.7",
+    "python-dotenv>=1.2.1",
+    "python-multipart>=0.0.12",
+    "rapidfuzz>=3.0.0",
+    "sentence-transformers>=2.2.0",
+    "tqdm>=4.67.1",
+    "uvicorn>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "types-requests",
+    "types-PyYAML",
+]
+
+[project.scripts]
+nexus = "nexus.cli.main:main"
