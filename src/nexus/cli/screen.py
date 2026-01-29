@@ -5,6 +5,7 @@ This command uses an LLM to screen papers based on title and abstract.
 """
 
 import os
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -100,10 +101,31 @@ def screen(
     client = LLMClient(api_key=api_key, model=model)
     screener = Screener(client)
 
-    # Prepare output
+    # Prepare output and resume logic
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"screening_{input_path.parent.name}.jsonl"
     
+    existing_dois = set()
+    if output_file.exists():
+        console.print(f"[yellow]Found existing output file. Resuming...[/yellow]")
+        try:
+            with open(output_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        if "doi" in data and data["doi"]:
+                            existing_dois.add(data["doi"])
+            console.print(f"  Skipping {len(existing_dois)} already screened papers.")
+        except Exception as e:
+            print_error(f"Error reading existing file: {e}")
+
+    # Filter documents
+    docs_to_screen = [d for d in documents if d.external_ids.doi not in existing_dois]
+    
+    if not docs_to_screen:
+        print_success("All documents have been screened!")
+        return
+
     # Run screening
     results = []
     
@@ -114,10 +136,10 @@ def screen(
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         console=console
     ) as progress:
-        task = progress.add_task("Screening...", total=len(documents))
+        task = progress.add_task("Screening...", total=len(docs_to_screen))
         
         # We wrap the generator to update progress
-        for result in screener.screen_documents(documents, criteria=criteria):
+        for result in screener.screen_documents(docs_to_screen, criteria=criteria):
             results.append(result)
             
             # Streaming save (append mode)
@@ -137,7 +159,7 @@ def screen(
             counts[r.decision.value] += 1
             
     console.print()
-    console.print("[bold]Summary:[/bold]")
+    console.print("[bold]Summary (Current Run):[/bold]")
     console.print(f"  Include: [green]{counts['include']}[/green]")
     console.print(f"  Maybe:   [yellow]{counts['maybe']}[/yellow]")
     console.print(f"  Exclude: [red]{counts['exclude']}[/red]")

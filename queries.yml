@@ -4,12 +4,26 @@ queries:
   # -------------------------
   # 1) Problem: domain shift / lab-to-field
   # -------------------------
-  - id: DS01
+  - id: DS01_A
     theme: domain_shift
     priority: high
     query: >
-      ("domain shift" OR "dataset shift" OR "distribution shift" OR "domain discrepancy" OR
-      "covariate shift" OR "out-of-distribution" OR OOD OR "generalization gap")
+      ("domain shift" OR "dataset shift" OR "distribution shift" OR "domain discrepancy")
+      AND ("plant disease" OR "leaf disease")
+      AND (PlantVillage OR PlantDoc OR PlantWild OR "in-field" OR "real-world" OR "field images")
+    include_any:
+      - PlantVillage
+      - PlantDoc
+      - PlantWild
+    exclude_any:
+      - "hyperspectral"
+      - "remote sensing"
+
+  - id: DS01_B
+    theme: domain_shift
+    priority: high
+    query: >
+      ("covariate shift" OR "out-of-distribution" OR OOD OR "generalization gap")
       AND ("plant disease" OR "leaf disease")
       AND (PlantVillage OR PlantDoc OR PlantWild OR "in-field" OR "real-world" OR "field images")
     include_any:
@@ -112,10 +126,18 @@ queries:
   # -------------------------
   # 6) Medical bridge: medical imaging techniques transferred to ag
   # -------------------------
-  - id: MED01
+  - id: MED01_A
     theme: medical_bridge
     priority: medium
     query: >
-      ("medical imaging" OR radiology OR ultrasound OR dermoscopy OR histopathology OR "computer-aided diagnosis" OR CAD)
+      ("medical imaging" OR radiology OR ultrasound OR dermoscopy OR histopathology)
+      AND ("plant disease" OR "leaf disease")
+      AND (transfer OR adaptation OR "domain adaptation" OR "few-shot" OR "self-supervised")
+
+  - id: MED01_B
+    theme: medical_bridge
+    priority: medium
+    query: >
+      ("computer-aided diagnosis" OR CAD)
       AND ("plant disease" OR "leaf disease")
       AND (transfer OR adaptation OR "domain adaptation" OR "few-shot" OR "self-supervised")
