@@ -40,7 +40,6 @@ venv.bak/
 results/
 out/
 outputs/
-dedup/
 exports/
 data/
 # Exception: Keep .gitkeep in data if it exists to preserve folder structure
