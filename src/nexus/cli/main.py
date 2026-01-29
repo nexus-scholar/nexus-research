@@ -9,9 +9,13 @@ from pathlib import Path
 from typing import Optional
 
 import click
+from dotenv import load_dotenv
 
 from nexus.cli.formatting import console, print_error, print_header
 from nexus.cli.utils import setup_logging
+
+# Load environment variables from .env
+load_dotenv()
 
 
 # Version info
