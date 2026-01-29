@@ -36,6 +36,11 @@ from nexus.retrieval.fetcher import PDFFetcher
     help="Output directory for PDFs.",
 )
 @click.option(
+    "--include-only",
+    is_flag=True,
+    help="Only fetch documents with decision='include'.",
+)
+@click.option(
     "--limit",
     type=int,
     help="Limit number of downloads (useful for testing).",
@@ -45,6 +50,7 @@ def fetch(
     ctx,
     input_path: Optional[Path],
     output_dir: Path,
+    include_only: bool,
     limit: Optional[int],
 ):
     """Fetch full-text PDFs.
@@ -58,14 +64,25 @@ def fetch(
 
     # Resolve input path
     if not input_path:
-        # Try to find latest dedup run
-        dedup_base = Path("results/dedup")
-        latest_dedup = get_latest_run(dedup_base, prefix="dedup_")
-        if latest_dedup:
-            input_path = latest_dedup / "representatives.jsonl"
-        else:
-            print_error("No input specified and no recent deduplication run found.")
-            return
+        # Try screening results first, then dedup
+        screening_base = Path("results/screening")
+        latest_screening = get_latest_run(screening_base, prefix="screening_")
+        
+        if latest_screening:
+            # find the jsonl file in that dir
+            files = list(latest_screening.glob("*.jsonl"))
+            if files:
+                input_path = files[0]
+        
+        if not input_path:
+            dedup_base = Path("results/dedup")
+            latest_dedup = get_latest_run(dedup_base, prefix="dedup_")
+            if latest_dedup:
+                input_path = latest_dedup / "representatives.jsonl"
+
+    if not input_path:
+        print_error("No input specified and no recent runs found.")
+        return
 
     console.print(f"[bold]Input:[/bold] {input_path}")
     
@@ -76,9 +93,18 @@ def fetch(
         print_error(f"Failed to load documents: {e}")
         return
 
+    # Filter by decision
+    if include_only:
+        documents = [d for d in documents if d.decision == "include"]
+        console.print(f"[yellow]Filtering for 'include' decisions only[/yellow]")
+
     if limit:
         documents = documents[:limit]
         console.print(f"[yellow]Limiting to first {limit} documents[/yellow]")
+
+    if not documents:
+        print_error("No documents to fetch after filtering.")
+        return
 
     console.print(f"Loaded {len(documents)} documents.")
 

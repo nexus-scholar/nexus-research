@@ -132,6 +132,9 @@ class Document(BaseModel):
     # Deduplication (populated later)
     cluster_id: Optional[int] = None
 
+    # Screening (populated by screener)
+    decision: Optional[str] = None
+
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = Field(default=None, exclude=True)
 
