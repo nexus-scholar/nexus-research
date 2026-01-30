@@ -1,57 +1,55 @@
-# Simple SLR - Future Development Roadmap
+# Nexus Research - Development Roadmap
 
-This document outlines the planned modules to expand **Simple SLR** from a metadata fetcher into a full-text research pipeline.
+This document tracks the evolution of **Nexus** from a simple fetcher to a full-stack AI research assistant.
 
-## Architectural Change: Modular Monorepo
-We are moving to a modular structure where specialized components exist as sibling packages in `src/` to ensure separation of concerns.
+## ✅ Completed Modules
 
-```text
-src/
-├── slr/                 # Metadata fetching, project management, CLI entry point
-├── screener/            # LLM-based title/abstract screening
-├── retrieval/           # Full-text PDF fetching
-└── extraction/          # PDF-to-Markdown conversion (External: pdf-struct-rag)
-```
+### 1. Core & Metadata (`nexus.slr`)
+- [x] Multi-provider search (OpenAlex, Semantic Scholar, ArXiv, Crossref).
+- [x] Intelligent deduplication (DOI, ArXiv ID, Fuzzy Title).
+- [x] Unified `Document` model and configuration.
 
----
+### 2. Screener (`nexus.screener`)
+- [x] LLM-based title/abstract screening.
+- [x] Resumable workflows.
+- [x] Customizable criteria via `nexus screen --criteria`.
 
-## 1. Screener Module (`src/screener`)
-**Goal:** Automated initial screening of titles and abstracts using Large Language Models.
+### 3. Retrieval (`nexus.retrieval`)
+- [x] Hybrid fetching strategy.
+- [x] Open Access (Unpaywall, OpenAlex).
+- [x] Direct Download (ArXiv).
+- [x] **Browser Automation:** Headful/Headless Playwright integration for institutional proxies (SNDL).
+- [x] Authentication state management (`auth.json`).
 
-*   **Input:** `representatives.jsonl` (from `slr`).
-*   **Logic:** 
-    *   Classify papers into `Include`, `Exclude`, or `Maybe` based on research criteria.
-    *   Provide a brief reasoning for the decision.
-*   **Implementation:** Use structured JSON outputs from models (Gemini/OpenAI) via Pydantic.
-*   **Output:** `results/screening/screening_results.jsonl`
-
-## 2. Retrieval Module (`src/retrieval`)
-**Goal:** Automate the retrieval of full-text PDF files for included/maybe papers.
-
-*   **Logic:**
-    *   Resolve DOIs to PDF URLs.
-    *   Prioritize Open Access (OA) sources using APIs like **Unpaywall**.
-    *   Direct downloads from arXiv for preprint records.
-*   **Storage:** Save PDFs in `results/storage/pdfs/` indexed by DOI or ID.
-
-## 3. Extraction Module (`src/extraction`)
-**Goal:** Convert PDF documents into structured text (Markdown) for downstream analysis.
-
-*   **Status:** **Cloned** from `nexus-scholar/pdf-struct-rag`.
-*   **Action Items:**
-    *   Review `src/extraction/README.md` and `pyproject.toml` (if present) to understand dependencies.
-    *   Create an integration layer (adapter) so `slr` can invoke it.
+### 4. Extraction (`nexus.extraction`)
+- [x] Integrated `pdf-struct-rag` pipeline.
+- [x] PDF to Markdown conversion.
+- [x] Table and citation extraction.
+- [x] **Parallel Processing:** Multi-core batch extraction.
 
 ---
 
-## Strategic Pipeline Flow
+## 🚧 Upcoming: Analysis Phase
 
-1.  **Fetcher (`slr`):** Get metadata.
-2.  **Deduplicator (`slr`):** Merge records.
-3.  **LLM Screener (`screener`):** Filter candidates.
-4.  **PDF Fetcher (`retrieval`):** Download only relevant full-text.
-5.  **PDF Extractor (`extraction`):** Convert to machine-readable format.
-6.  **Synthesis:** Full-text analysis/Review writing.
+### 5. Archivist (Indexing)
+**Goal:** Make the extracted content searchable.
+- [ ] **Vector Store:** Index semantic chunks into ChromaDB.
+- [ ] **Metadata Filtering:** Filter chunks by Year, Author, or Theme.
+
+### 6. Oracle (Chat & Synthesis)
+**Goal:** Interact with the literature.
+- [ ] **`nexus chat`:** RAG-based Q&A over the entire document set.
+- [ ] **`nexus synthesize`:** Generate literature review sections (Introduction, Methodology comparison) automatically.
+
+### 7. User Interface (Optional)
+- [ ] Simple Streamlit or Chainlit UI for non-CLI users.
 
 ---
-**Updated on:** Wednesday, January 28, 2026
+
+## Technical Debt / Refactoring
+- [ ] Centralize logging configuration.
+- [ ] Add unit tests for the new `retrieval` and `extraction` modules.
+- [ ] Create a Docker container for reproducible environments.
+
+---
+**Updated:** January 29, 2026

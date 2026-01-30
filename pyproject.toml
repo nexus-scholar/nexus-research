@@ -16,6 +16,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "openai>=1.0.0",
     "pandas>=3.0.0",
+    "playwright>=1.40.0",  # Added for browser automation
     "pymupdf==1.26.6",
     "pymupdf-layout>=0.2.0",
     "pymupdf4llm>=0.2.7",
@@ -36,3 +37,4 @@ dev = [
 
 [project.scripts]
 nexus = "nexus.cli.main:main"
+slr = "nexus.cli.main:main"

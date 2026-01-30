@@ -92,6 +92,7 @@ from nexus.cli.validate import validate
 from nexus.cli.screen import screen
 from nexus.cli.fetch import fetch
 from nexus.cli.extract import extract
+from nexus.cli.login import login
 
 cli.add_command(init)
 cli.add_command(search)
@@ -101,6 +102,7 @@ cli.add_command(validate)
 cli.add_command(screen)
 cli.add_command(fetch)
 cli.add_command(extract)
+cli.add_command(login)
 
 
 def main():

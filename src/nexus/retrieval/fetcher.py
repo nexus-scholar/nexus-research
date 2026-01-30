@@ -1,5 +1,5 @@
-from pathlib import Path
 import logging
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from nexus.core.models import Document
@@ -8,6 +8,7 @@ from nexus.retrieval.sources.arxiv import ArXivSource
 from nexus.retrieval.sources.openalex import OpenAlexSource
 from nexus.retrieval.sources.unpaywall import UnpaywallSource
 from nexus.retrieval.sources.direct import DirectSource
+from nexus.retrieval.sources.sndl import SNDLSource
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class PDFFetcher:
             ArXivSource(self.config),
             UnpaywallSource(self.config),
             OpenAlexSource(self.config),
+            SNDLSource(self.config),
         ]
 
     def get_filename(self, doc: Document) -> str:

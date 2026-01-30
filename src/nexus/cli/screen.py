@@ -139,12 +139,38 @@ def screen(
         task = progress.add_task("Screening...", total=len(docs_to_screen))
         
         # We wrap the generator to update progress
-        for result in screener.screen_documents(docs_to_screen, criteria=criteria):
-            results.append(result)
+        # Create a map for quick lookup if needed, or just iterate if order is preserved
+        # Actually, screener yields results. We need to match them to docs.
+        # But screener takes a list. It yields one result per doc in order.
+        
+        # Better approach: Iterate over documents and screen one by one in the loop
+        # But Screener.screen_documents is a generator.
+        
+        # Let's iterate the generator and the docs together?
+        # Or just have screener yield (doc, result) tuple? No, keep it clean.
+        # We can map by DOI/Title or assume order. Assuming order is risky if errors occur.
+        
+        # Let's assume order for now as screener yields for each input.
+        
+        doc_map = {d.external_ids.doi: d for d in docs_to_screen if d.external_ids.doi}
+        # Fallback map for docs without DOI? Title?
+        # Simplest: Update Screener to return the original doc OR pass it through.
+        
+        # Actually, let's just update the loop to manually call client for each doc
+        # inside this CLI loop? No, that breaks the abstraction.
+        
+        # I will rely on the fact that I passed docs_to_screen to screen_documents.
+        # I will update the Document object with the result.
+        
+        for i, result in enumerate(screener.screen_documents(docs_to_screen, criteria=criteria)):
+            original_doc = docs_to_screen[i] # This assumes 1:1 mapping and order preservation
             
-            # Streaming save (append mode)
+            # Update the document
+            original_doc.decision = result.decision.value
+            
+            # Save full document
             with open(output_file, "a", encoding="utf-8") as f:
-                f.write(result.model_dump_json() + "\n")
+                f.write(original_doc.model_dump_json() + "\n")
             
             color = "green" if result.decision == "include" else "red" if result.decision == "exclude" else "yellow"
             progress.console.print(f"  [{color}]{result.decision.upper()}[/{color}] {result.title[:60]}...")
