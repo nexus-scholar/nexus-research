@@ -13,8 +13,8 @@ from typing import Any, Dict, Iterator, Optional
 
 from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
+from nexus.normalization.standardizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.base import BaseProvider
-from nexus.providers.normalizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.query_translator import SimpleQueryTranslator
 from nexus.utils.exceptions import ProviderError, RateLimitError
 

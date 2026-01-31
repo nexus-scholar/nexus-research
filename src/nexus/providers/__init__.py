@@ -25,7 +25,6 @@ Example:
 from .arxiv import ArxivProvider
 from .base import BaseProvider, ProviderRegistry, get_registry
 from .crossref import CrossrefProvider
-from .normalizer import AuthorParser, DateParser, FieldExtractor, IDExtractor, ResponseNormalizer
 from .openalex import OpenAlexProvider
 from .query_translator import (
     BaseQueryTranslator,
@@ -39,6 +38,15 @@ from .query_translator import (
     create_translator,
 )
 from .s2 import SemanticScholarProvider
+
+# Re-export normalization classes from new location for compatibility
+from nexus.normalization.standardizer import (
+    AuthorParser,
+    DateParser,
+    FieldExtractor,
+    IDExtractor,
+    ResponseNormalizer,
+)
 
 # Import ProviderConfig for type hints
 from nexus.core.config import ProviderConfig
@@ -83,7 +91,7 @@ __all__ = [
     "BaseProvider",
     "ProviderRegistry",
     "get_registry",
-    "get_provider",  # Add to exports
+    "get_provider",
     # Query translation
     "QueryParser",
     "QueryToken",
@@ -94,7 +102,7 @@ __all__ = [
     "BooleanQueryTranslator",
     "StructuredQueryTranslator",
     "create_translator",
-    # Response normalization
+    # Response normalization (Re-exported)
     "FieldExtractor",
     "AuthorParser",
     "DateParser",

@@ -12,8 +12,8 @@ from typing import Any, Dict, Iterator, Optional
 
 from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
+from nexus.normalization.standardizer import FieldExtractor
 from nexus.providers.base import BaseProvider
-from nexus.providers.normalizer import FieldExtractor
 
 logger = logging.getLogger(__name__)
 

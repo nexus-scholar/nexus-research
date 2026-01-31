@@ -1,15 +1,17 @@
 """
 Search command for querying academic databases.
 
-This command executes searches across configured providers.
+This command executes searches across configured providers in parallel.
 """
 
+import concurrent.futures
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import click
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 
 from nexus.cli.formatting import (
     console,
@@ -21,7 +23,6 @@ from nexus.cli.formatting import (
     print_header,
     print_provider_results,
     print_success,
-    print_warning,
 )
 from nexus.cli.main import pass_context
 from nexus.cli.utils import (
@@ -31,9 +32,94 @@ from nexus.cli.utils import (
     save_documents,
     save_metadata,
 )
-from nexus.core.config import ProviderConfig
-from nexus.core.models import Query
+from nexus.core.config import ProviderConfig, SLRConfig
+from nexus.core.models import Query, Document
 from nexus.providers import get_provider
+
+
+def _search_provider_worker(
+    provider_name: str,
+    config: SLRConfig,
+    all_queries: List[Dict[str, Any]],
+    output_dir: Path,
+    max_results: Optional[int],
+    output_format: str,
+    progress: Progress,
+    task_id: Any,
+) -> int:
+    """Worker function to search a single provider."""
+    
+    # Get provider config
+    prov_config = config.providers.get_provider(provider_name)
+    if not prov_config:
+        prov_config = ProviderConfig()
+
+    # Override mailto if set in main config
+    if config.mailto:
+        prov_config.mailto = config.mailto
+
+    # Create provider instance
+    try:
+        provider_instance = get_provider(provider_name, prov_config)
+    except Exception as e:
+        progress.console.print(f"[red]Failed to initialize {provider_name}: {e}[/red]")
+        return 0
+
+    # Create provider output directory
+    provider_dir = output_dir / provider_name
+    provider_dir.mkdir(exist_ok=True)
+
+    provider_total = 0
+    all_provider_docs = []
+
+    for q_info in all_queries:
+        # Check for cancellation/interruption? (not easily possible with threads)
+        
+        # Create Query object
+        query_obj = Query(
+            text=q_info["text"],
+            year_min=config.year_min,
+            year_max=config.year_max,
+            max_results=max_results,
+        )
+
+        # Execute search
+        try:
+            # We convert iterator to list to ensure all results are fetched
+            docs = list(provider_instance.search(query_obj))
+
+            if docs:
+                # Save per-query results
+                query_file = provider_dir / f"{q_info['id']}_results.jsonl"
+                save_documents(docs, query_file, format="jsonl")
+
+                all_provider_docs.extend(docs)
+                provider_total += len(docs)
+                
+                # Concise logging
+                # progress.console.print(
+                #     f"  [{provider_name}] {q_info['id']}: {len(docs)} results"
+                # )
+            
+        except Exception as e:
+            progress.console.print(
+                f"  [{provider_name}] {q_info['id']}: [red]Error: {e}[/red]"
+            )
+
+        # Update progress bar
+        progress.update(task_id, advance=1)
+
+    # Save aggregated results
+    if all_provider_docs:
+        all_results_file = provider_dir / "all_results.jsonl"
+        save_documents(all_provider_docs, all_results_file, format="jsonl")
+
+        # Save CSV if requested
+        if output_format in ("csv", "both"):
+            csv_file = provider_dir / "all_results.csv"
+            save_documents(all_provider_docs, csv_file, format="csv")
+
+    return provider_total
 
 
 @click.command()
@@ -105,6 +191,11 @@ from nexus.providers import get_provider
     is_flag=True,
     help="Show what would be searched without executing",
 )
+@click.option(
+    "--parallel/--no-parallel",
+    default=True,
+    help="Enable/disable parallel execution",
+)
 @pass_context
 def search(
     ctx,
@@ -121,6 +212,7 @@ def search(
     run_id: Optional[str],
     resume: bool,
     dry_run: bool,
+    parallel: bool,
 ):
     """Search academic databases.
 
@@ -258,6 +350,7 @@ def search(
         "Year range": f"{config.year_min or 'any'}-{config.year_max or 'current'}",
         "Max results": max_results or "unlimited",
         "Output": str(output_dir),
+        "Parallel": str(parallel),
     })
 
     if dry_run:
@@ -272,83 +365,53 @@ def search(
 
     # Execute searches
     provider_results: Dict[str, int] = {}
+    
+    console.print(f"\n[bold]Starting search execution...[/bold]\n")
 
-    for provider_name in enabled_providers:
-        console.print(f"\n[bold cyan]Searching {provider_name}...[/bold cyan]")
-
-        # Get provider config
-        prov_config = config.providers.get_provider(provider_name)
-        if not prov_config:
-            prov_config = ProviderConfig()
-
-        # Override mailto if set in main config
-        if config.mailto:
-            prov_config.mailto = config.mailto
-
-        # Create provider instance
-        try:
-            provider_instance = get_provider(provider_name, prov_config)
-        except Exception as e:
-            print_error(f"Failed to initialize {provider_name}: {e}")
-            continue
-
-        # Create provider output directory
-        provider_dir = output_dir / provider_name
-        provider_dir.mkdir(exist_ok=True)
-
-        # Search each query
-        provider_total = 0
-        all_provider_docs = []
-
-        with create_progress() as progress:
-            task = progress.add_task(
-                f"[cyan]{provider_name}[/cyan]",
-                total=len(all_queries)
-            )
-
-            for q_info in all_queries:
-                # Create Query object
-                query_obj = Query(
-                    text=q_info["text"],
-                    year_min=config.year_min,
-                    year_max=config.year_max,
-                    max_results=max_results,
+    # Use ThreadPoolExecutor for parallel execution
+    max_workers = len(enabled_providers) if parallel else 1
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        console=console,
+    ) as progress:
+        
+        futures = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for prov_name in enabled_providers:
+                # Add task for this provider
+                task_id = progress.add_task(
+                    f"[cyan]{prov_name}[/cyan]", 
+                    total=len(all_queries)
                 )
+                
+                # Submit worker
+                future = executor.submit(
+                    _search_provider_worker,
+                    prov_name,
+                    config,
+                    all_queries,
+                    output_dir,
+                    max_results,
+                    output_format,
+                    progress,
+                    task_id,
+                )
+                futures[future] = prov_name
 
-                # Execute search
+            # Wait for completion and gather results
+            for future in concurrent.futures.as_completed(futures):
+                prov_name = futures[future]
                 try:
-                    docs = list(provider_instance.search(query_obj))
-
-                    # Save per-query results
-                    query_file = provider_dir / f"{q_info['id']}_results.jsonl"
-                    save_documents(docs, query_file, format="jsonl")
-
-                    all_provider_docs.extend(docs)
-                    provider_total += len(docs)
-
-                    progress.console.print(
-                        f"  {q_info['id']}: {q_info['text'][:50]}... "
-                        f"[green]{len(docs)} results[/green]"
-                    )
-
+                    count = future.result()
+                    provider_results[prov_name] = count
                 except Exception as e:
-                    progress.console.print(
-                        f"  {q_info['id']}: [red]Error: {e}[/red]"
-                    )
-
-                progress.update(task, advance=1)
-
-        # Save aggregated results
-        all_results_file = provider_dir / "all_results.jsonl"
-        save_documents(all_provider_docs, all_results_file, format="jsonl")
-
-        # Save CSV if requested
-        if output_format in ("csv", "both"):
-            csv_file = provider_dir / "all_results.csv"
-            save_documents(all_provider_docs, csv_file, format="csv")
-
-        provider_results[provider_name] = provider_total
-        print_success(f"{provider_name}: {format_number(provider_total)} documents")
+                    print_error(f"Provider {prov_name} crashed: {e}")
+                    provider_results[prov_name] = 0
 
     # Save metadata
     metadata = {
@@ -403,4 +466,3 @@ def search(
     console.print(f"  Output: [cyan]{output_dir}[/cyan]")
     console.print(f"  Duration: [cyan]{format_duration(time.time() - start_time)}[/cyan]")
     console.print()
-

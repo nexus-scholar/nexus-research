@@ -13,8 +13,8 @@ from typing import Any, Dict, Iterator, Optional
 
 from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
+from nexus.normalization.standardizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.base import BaseProvider
-from nexus.providers.normalizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.query_translator import SimpleQueryTranslator
 
 logger = logging.getLogger(__name__)
@@ -102,11 +102,13 @@ class CrossrefProvider(BaseProvider):
         cursor = "*"
         seen_dois = set()
         page_count = 0
+        total_fetched = 0
         max_pages = 500  # Safety limit
+        max_results = query.max_results or float("inf")
 
         logger.info(f"Starting Crossref search: {query.text}")
 
-        while cursor and page_count < max_pages:
+        while cursor and page_count < max_pages and total_fetched < max_results:
             # Update cursor in params
             params["cursor"] = cursor
 
@@ -124,6 +126,9 @@ class CrossrefProvider(BaseProvider):
             # Process items
             new_docs = 0
             for item in items:
+                if total_fetched >= max_results:
+                    break
+
                 # Normalize response
                 doc = self._normalize_response(item)
                 if doc is None:
@@ -141,6 +146,7 @@ class CrossrefProvider(BaseProvider):
                     continue
 
                 new_docs += 1
+                total_fetched += 1
                 yield doc
 
             # Check for next cursor
@@ -158,7 +164,7 @@ class CrossrefProvider(BaseProvider):
             )
 
         logger.info(
-            f"Crossref search complete: {len(seen_dois)} unique documents "
+            f"Crossref search complete: {total_fetched} unique documents "
             f"over {page_count} pages"
         )
 
