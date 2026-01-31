@@ -102,6 +102,14 @@ Convert PDFs to Markdown for analysis.
 nexus extract --tables --images
 ```
 
+**Step 6: Synthesize & Visualize**
+Perform batch analysis and generate automated review drafts.
+```bash
+nexus analyze
+nexus visualize
+nexus synthesize
+```
+
 ---
 
 ## 📂 Architecture
@@ -114,6 +122,7 @@ Nexus is built as a modular "monorepo" with distinct components:
 | **`nexus.screener`** | LLM-based logic for title/abstract screening. |
 | **`nexus.retrieval`** | PDF retrieval strategies (Unpaywall, Direct, ArXiv). |
 | **`nexus.extraction`** | Advanced PDF processing pipeline (Math, Tables, Layout). |
+| **`nexus.analysis`** | Cross-corpus synthesis, visualization, and reporting. |
 | **`nexus.core`** | Shared data models (`Document`) and configuration. |
 
 ---
@@ -125,9 +134,11 @@ Nexus is built as a modular "monorepo" with distinct components:
 - [x] **Deduplication:** Exact DOI/ArXiv matching.
 - [x] **Retrieval:** Basic PDF fetching (OA + ArXiv).
 - [x] **Extraction:** Integration of `pdf-struct-rag` pipeline.
+- [x] **Analysis:** Batch metadata extraction and visualization.
+- [x] **Synthesis:** Automated draft generation with LLMs.
 - [ ] **Deduplication:** Semantic (embedding-based) matching.
 - [ ] **Screening:** Support for local LLMs (Ollama/Llama.cpp).
-- [ ] **Analysis:** Full-text synthesis and "Chat with Papers".
+- [ ] **Advanced AI:** "Chat with Papers" RAG interface.
 
 ---
 

@@ -68,3 +68,6 @@ htmlcov/
 # Local Config Overrides (Future proofing)
 nexus.local.yml
 .env.local
+
+Writing
+analysis_workspace

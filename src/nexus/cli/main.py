@@ -93,6 +93,9 @@ from nexus.cli.screen import screen
 from nexus.cli.fetch import fetch
 from nexus.cli.extract import extract
 from nexus.cli.login import login
+from nexus.cli.analyze import analyze
+from nexus.cli.visualize import visualize
+from nexus.cli.synthesize import synthesize
 
 cli.add_command(init)
 cli.add_command(search)
@@ -103,6 +106,9 @@ cli.add_command(screen)
 cli.add_command(fetch)
 cli.add_command(extract)
 cli.add_command(login)
+cli.add_command(analyze)
+cli.add_command(visualize)
+cli.add_command(synthesize)
 
 
 def main():
