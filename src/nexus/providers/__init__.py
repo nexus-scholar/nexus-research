@@ -26,6 +26,7 @@ from .arxiv import ArxivProvider
 from .base import BaseProvider, ProviderRegistry, get_registry
 from .crossref import CrossrefProvider
 from .openalex import OpenAlexProvider
+from .pubmed import PubMedProvider
 from .query_translator import (
     BaseQueryTranslator,
     BooleanOperator,
@@ -58,7 +59,7 @@ def get_provider(name: str, config: ProviderConfig) -> BaseProvider:
     Factory function to create provider instances.
 
     Args:
-        name: Provider name (openalex, crossref, arxiv, semantic_scholar, s2)
+        name: Provider name (openalex, crossref, arxiv, semantic_scholar, s2, pubmed)
         config: Provider configuration
 
     Returns:
@@ -73,6 +74,7 @@ def get_provider(name: str, config: ProviderConfig) -> BaseProvider:
         "arxiv": ArxivProvider,
         "semantic_scholar": SemanticScholarProvider,
         "s2": SemanticScholarProvider,  # Alias
+        "pubmed": PubMedProvider,
     }
 
     name_lower = name.lower()
@@ -113,4 +115,5 @@ __all__ = [
     "CrossrefProvider",
     "ArxivProvider",
     "SemanticScholarProvider",
+    "PubMedProvider",
 ]

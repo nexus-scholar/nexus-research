@@ -57,6 +57,9 @@ class ProvidersConfig(BaseModel):
     arxiv: ProviderConfig = Field(
         default_factory=lambda: ProviderConfig(enabled=True, rate_limit=0.5)
     )
+    pubmed: ProviderConfig = Field(
+        default_factory=lambda: ProviderConfig(enabled=True, rate_limit=3.0)
+    )
     semantic_scholar: ProviderConfig = Field(
         default_factory=lambda: ProviderConfig(enabled=False, rate_limit=1.0), alias="s2"
     )
