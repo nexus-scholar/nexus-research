@@ -28,6 +28,7 @@ from nexus.cli.main import pass_context
 from nexus.cli.utils import (
     generate_run_id,
     load_config,
+    load_documents,
     load_queries,
     save_documents,
     save_metadata,
@@ -46,6 +47,7 @@ def _search_provider_worker(
     output_format: str,
     progress: Progress,
     task_id: Any,
+    resume: bool = False,
 ) -> int:
     """Worker function to search a single provider."""
     
@@ -73,6 +75,25 @@ def _search_provider_worker(
     all_provider_docs = []
 
     for q_info in all_queries:
+        query_file = provider_dir / f"{q_info['id']}_results.jsonl"
+        
+        # Check resume condition
+        if resume and query_file.exists() and query_file.stat().st_size > 0:
+            try:
+                # Load existing documents to maintain counts and aggregation
+                existing_docs = load_documents(query_file)
+                if existing_docs:
+                    all_provider_docs.extend(existing_docs)
+                    provider_total += len(existing_docs)
+                    # progress.console.print(
+                    #     f"  [{provider_name}] {q_info['id']}: Skipped (Resumed {len(existing_docs)} docs)"
+                    # )
+                    progress.update(task_id, advance=1)
+                    continue
+            except Exception:
+                # If load fails, ignore and re-run search
+                pass
+
         # Check for cancellation/interruption? (not easily possible with threads)
         
         # Create Query object
@@ -90,7 +111,6 @@ def _search_provider_worker(
 
             if docs:
                 # Save per-query results
-                query_file = provider_dir / f"{q_info['id']}_results.jsonl"
                 save_documents(docs, query_file, format="jsonl")
 
                 all_provider_docs.extend(docs)
@@ -400,6 +420,7 @@ def search(
                     output_format,
                     progress,
                     task_id,
+                    resume,
                 )
                 futures[future] = prov_name
 

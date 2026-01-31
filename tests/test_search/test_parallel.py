@@ -48,7 +48,8 @@ class TestParallelSearch(unittest.TestCase):
             max_results=10,
             output_format="jsonl",
             progress=mock_progress,
-            task_id=1
+            task_id=1,
+            resume=False
         )
 
         self.assertEqual(count, 1)
@@ -77,7 +78,8 @@ class TestParallelSearch(unittest.TestCase):
             10,
             "jsonl",
             mock_progress,
-            1
+            1,
+            resume=False
         )
 
         self.assertEqual(count, 0)
