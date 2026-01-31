@@ -33,8 +33,16 @@ dev = [
     "pytest",
     "types-requests",
     "types-PyYAML",
+    "sphinx",
+    "sphinx-rtd-theme",
 ]
 
 [project.scripts]
 nexus = "nexus.cli.main:main"
 slr = "nexus.cli.main:main"
+
+[dependency-groups]
+dev = [
+    "sphinx>=9.1.0",
+    "sphinx-rtd-theme>=3.1.0",
+]
