@@ -33,7 +33,18 @@ Unlike simple scrapers, Nexus is a complete pipeline that integrates **LLM-based
 ```bash
 # Clone the repository
 git clone https://github.com/nexus-scholar/nexus-research.git
+
+# Change directory
 cd nexus-research
+
+# Create a virtual environment (optional but recommended)
+python -m venv .venv
+
+# Activate the virtual environment 
+# Linux
+source .venv/bin/activate
+# Windows 
+.venv\Scripts\activate
 
 # Install with uv (faster)
 uv pip install -e .
