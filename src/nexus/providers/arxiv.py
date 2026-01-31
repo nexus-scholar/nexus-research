@@ -230,9 +230,15 @@ class ArxivProvider(BaseProvider):
         if self._is_arxiv_syntax(text):
             return text
 
-        # Otherwise, search in title, abstract, and all fields
-        # Use quotes to preserve phrase
         safe_text = text.strip()
+
+        # Check for boolean operators
+        # If present, assume it's a structured boolean query and search 'all' fields
+        if re.search(r"\b(AND|OR|ANDNOT|NOT)\b", safe_text):
+            return f"all:({safe_text})"
+
+        # Otherwise, treat as phrase or keyword list
+        # Search in title, abstract, and all fields using quotes for exact phrase match
         query_parts = [
             f'ti:"{safe_text}"',
             f'abs:"{safe_text}"',
