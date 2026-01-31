@@ -258,6 +258,8 @@ class JSONExporter(JSONLExporter):
 
     This is a convenience class that exports to standard JSON array format
     instead of JSONL. Inherits from JSONLExporter and overrides export methods.
+    
+    Note: Uses stream writing to handle large datasets efficiently.
 
     Example:
         >>> from nexus.export import JSONExporter
@@ -297,13 +299,24 @@ class JSONExporter(JSONLExporter):
         output_path = self._get_output_path(output_file)
 
         try:
-            docs_list = [
-                self._document_to_dict(doc, include_raw)
-                for doc in documents
-            ]
-
             with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(docs_list, f, ensure_ascii=False, indent=indent, **kwargs)
+                f.write('[\n')
+                
+                for i, doc in enumerate(documents):
+                    if i > 0:
+                        f.write(',\n')
+                    
+                    json_obj = self._document_to_dict(doc, include_raw)
+                    json_str = json.dumps(json_obj, ensure_ascii=False, indent=indent, **kwargs)
+                    
+                    # Indent the whole object if needed to fit inside the array
+                    if indent:
+                        prefix = " " * indent
+                        json_str = "\n".join(prefix + line for line in json_str.split('\n'))
+                    
+                    f.write(json_str)
+
+                f.write('\n]')
 
         except IOError as e:
             raise ExportWriteError(f"Failed to write JSON file: {e}") from e
@@ -340,31 +353,46 @@ class JSONExporter(JSONLExporter):
         output_path = self._get_output_path(output_file)
 
         try:
-            if mode == "clusters":
-                data = [
-                    self._cluster_to_dict(cluster, include_raw)
-                    for cluster in clusters
-                ]
-            elif mode == "representatives":
-                data = [
-                    {
-                        **self._document_to_dict(cluster.representative, include_raw),
-                        'cluster_metadata': self._cluster_metadata_to_dict(cluster)
-                    }
-                    for cluster in clusters
-                ]
-            elif mode == "all":
-                data = []
-                for cluster in clusters:
-                    for doc in cluster.members:
-                        data.append(self._document_to_dict(doc, include_raw))
-            else:
-                raise ValueError(
-                    f"Invalid mode: {mode}. Use 'representatives', 'all', or 'clusters'"
-                )
-
             with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=indent, **kwargs)
+                f.write('[\n')
+                first = True
+
+                if mode == "clusters":
+                    for cluster in clusters:
+                        if not first:
+                            f.write(',\n')
+                        first = False
+                        
+                        data = self._cluster_to_dict(cluster, include_raw)
+                        self._write_json_item(f, data, indent, **kwargs)
+                        
+                elif mode == "representatives":
+                    for cluster in clusters:
+                        if not first:
+                            f.write(',\n')
+                        first = False
+
+                        data = {
+                            **self._document_to_dict(cluster.representative, include_raw),
+                            'cluster_metadata': self._cluster_metadata_to_dict(cluster)
+                        }
+                        self._write_json_item(f, data, indent, **kwargs)
+
+                elif mode == "all":
+                    for cluster in clusters:
+                        for doc in cluster.members:
+                            if not first:
+                                f.write(',\n')
+                            first = False
+                            
+                            data = self._document_to_dict(doc, include_raw)
+                            self._write_json_item(f, data, indent, **kwargs)
+                else:
+                    raise ValueError(
+                        f"Invalid mode: {mode}. Use 'representatives', 'all', or 'clusters'"
+                    )
+
+                f.write('\n]')
 
         except IOError as e:
             raise ExportWriteError(f"Failed to write JSON file: {e}") from e
@@ -372,4 +400,12 @@ class JSONExporter(JSONLExporter):
             raise ExportWriteError(f"Failed to serialize to JSON: {e}") from e
 
         return output_path
+
+    def _write_json_item(self, f, data: Any, indent: int, **kwargs):
+        """Helper to write a single indented JSON item."""
+        json_str = json.dumps(data, ensure_ascii=False, indent=indent, **kwargs)
+        if indent:
+            prefix = " " * indent
+            json_str = "\n".join(prefix + line for line in json_str.split('\n'))
+        f.write(json_str)
 

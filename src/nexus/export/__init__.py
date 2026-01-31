@@ -28,6 +28,7 @@ from nexus.export.base import BaseExporter, ExportError, ExportValidationError, 
 from nexus.export.bibtex_exporter import BibTeXExporter
 from nexus.export.csv_exporter import CSVExporter
 from nexus.export.jsonl_exporter import JSONExporter, JSONLExporter
+from nexus.export.ris_exporter import RISExporter
 
 __all__ = [
     # Base classes
@@ -40,6 +41,7 @@ __all__ = [
     "BibTeXExporter",
     "JSONLExporter",
     "JSONExporter",
+    "RISExporter",
     # Helper
     "get_exporter",
 ]
@@ -63,20 +65,16 @@ def get_exporter(format_name: str) -> BaseExporter:
         "csv": CSVExporter,
         "jsonl": JSONLExporter,
         "json": JSONExporter,
+        "ris": RISExporter,
+        "endnote": RISExporter,
     }
 
     format_lower = format_name.lower()
 
     if format_lower not in format_map:
-        # RIS and EndNote not yet implemented
-        if format_lower in ("ris", "endnote", "enw"):
-            raise ValueError(
-                f"Format '{format_name}' is not yet implemented. "
-                "Supported formats: bibtex, csv, jsonl, json"
-            )
         raise ValueError(
             f"Unknown format '{format_name}'. "
-            "Supported formats: bibtex, csv, jsonl, json"
+            "Supported formats: bibtex, csv, jsonl, json, ris"
         )
 
     exporter_class = format_map[format_lower]

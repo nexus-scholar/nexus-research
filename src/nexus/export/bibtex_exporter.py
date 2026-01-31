@@ -44,6 +44,7 @@ class BibTeXExporter(BaseExporter):
         self,
         documents: List[Document],
         output_file: str,
+        max_abstract_length: Optional[int] = None,
         **kwargs
     ) -> Path:
         """Export documents to BibTeX file.
@@ -51,7 +52,8 @@ class BibTeXExporter(BaseExporter):
         Args:
             documents: List of documents to export
             output_file: Name of output file (will add .bib if needed)
-            **kwargs: Additional options (currently unused)
+            max_abstract_length: Maximum length for abstracts (None for unlimited)
+            **kwargs: Additional options
 
         Returns:
             Path to created BibTeX file
@@ -63,6 +65,9 @@ class BibTeXExporter(BaseExporter):
             output_file = f"{output_file}.bib"
 
         output_path = self._get_output_path(output_file)
+        
+        # Reset used keys for this export run
+        self._used_keys = set()
 
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -71,7 +76,7 @@ class BibTeXExporter(BaseExporter):
                 f.write("% https://github.com/yourusername/simple-slr\n\n")
 
                 for doc in documents:
-                    entry = self._document_to_bibtex(doc)
+                    entry = self._document_to_bibtex(doc, max_abstract_length)
                     f.write(entry)
                     f.write("\n\n")
 
@@ -91,7 +96,7 @@ class BibTeXExporter(BaseExporter):
         Args:
             clusters: List of document clusters to export
             output_file: Name of output file (will add .bib if needed)
-            **kwargs: Additional options (currently unused)
+            **kwargs: Passed to export_documents
 
         Returns:
             Path to created BibTeX file
@@ -100,17 +105,22 @@ class BibTeXExporter(BaseExporter):
         representatives = [cluster.representative for cluster in clusters]
         return self.export_documents(representatives, output_file, **kwargs)
 
-    def _document_to_bibtex(self, doc: Document) -> str:
+    def _document_to_bibtex(
+        self, 
+        doc: Document, 
+        max_abstract_length: Optional[int] = None
+    ) -> str:
         """Convert a document to BibTeX entry.
 
         Args:
             doc: Document to convert
+            max_abstract_length: Max abstract length (None for unlimited)
 
         Returns:
             BibTeX entry string
         """
-        # Generate citation key
-        cite_key = self._generate_cite_key(doc)
+        # Generate unique citation key
+        cite_key = self._generate_unique_cite_key(doc)
 
         # Determine entry type
         entry_type = self._determine_entry_type(doc)
@@ -140,10 +150,10 @@ class BibTeXExporter(BaseExporter):
                 lines.append(f"  publisher = {{{self._escape_latex(doc.venue)}}},")
 
         if doc.abstract:
-            # Truncate very long abstracts
             abstract = doc.abstract
-            if len(abstract) > 500:
-                abstract = abstract[:497] + "..."
+            # Truncate if requested
+            if max_abstract_length is not None and len(abstract) > max_abstract_length:
+                abstract = abstract[:max_abstract_length - 3] + "..."
             lines.append(f"  abstract = {{{self._escape_latex(abstract)}}},")
 
         # Add identifiers
@@ -177,6 +187,44 @@ class BibTeXExporter(BaseExporter):
         lines.append("}")
 
         return "\n".join(lines)
+
+    def _generate_unique_cite_key(self, doc: Document) -> str:
+        """Generate a UNIQUE citation key for a document.
+
+        Resolves collisions by appending letters (a, b, c...).
+
+        Args:
+            doc: Document to generate key for
+
+        Returns:
+            Unique citation key
+        """
+        base_key = self._generate_cite_key(doc)
+        
+        if base_key not in self._used_keys:
+            self._used_keys.add(base_key)
+            return base_key
+            
+        # Collision detected, append suffix
+        suffix_char = 'a'
+        while True:
+            new_key = f"{base_key}{suffix_char}"
+            if new_key not in self._used_keys:
+                self._used_keys.add(new_key)
+                return new_key
+            
+            # Increment suffix
+            if suffix_char == 'z':
+                # Fallback to numbers if we run out of letters (unlikely)
+                counter = 1
+                while True:
+                    new_key = f"{base_key}{counter}"
+                    if new_key not in self._used_keys:
+                        self._used_keys.add(new_key)
+                        return new_key
+                    counter += 1
+            else:
+                suffix_char = chr(ord(suffix_char) + 1)
 
     def _generate_cite_key(self, doc: Document) -> str:
         """Generate a citation key for a document.
