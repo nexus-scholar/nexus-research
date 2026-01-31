@@ -20,7 +20,6 @@ class DeduplicationStrategy(str, Enum):
 
     CONSERVATIVE = "conservative"
     SEMANTIC = "semantic"
-    HYBRID = "hybrid"
 
 
 class ClassificationMethod(str, Enum):

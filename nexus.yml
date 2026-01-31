@@ -25,12 +25,12 @@ providers:
     timeout: 30      # Request timeout in seconds
 
   crossref:
-    enabled: false
+    enabled: true
     rate_limit: 1.0  # Conservative default
     timeout: 30
 
   arxiv:
-    enabled: false
+    enabled: true
     rate_limit: 0.5  # Recommended: 3 seconds per request
     timeout: 30
 

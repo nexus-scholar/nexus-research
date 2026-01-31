@@ -24,7 +24,6 @@ from nexus.dedup.deduplicator import Deduplicator
 from nexus.dedup.strategies import (
     ConservativeStrategy,
     DeduplicationStrategy,
-    HybridStrategy,
     SemanticStrategy,
 )
 
@@ -33,5 +32,4 @@ __all__ = [
     "DeduplicationStrategy",
     "ConservativeStrategy",
     "SemanticStrategy",
-    "HybridStrategy",
 ]

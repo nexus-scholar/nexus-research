@@ -56,7 +56,7 @@ from nexus.dedup import Deduplicator
 )
 @click.option(
     "--strategy",
-    type=click.Choice(["conservative", "semantic", "hybrid"], case_sensitive=False),
+    type=click.Choice(["conservative", "semantic"], case_sensitive=False),
     help="Deduplication strategy",
 )
 @click.option(
@@ -148,7 +148,7 @@ def deduplicate(
         dedup_config.embedding_model = embedding_model
 
     # Check for semantic dependencies
-    if dedup_config.strategy in (DeduplicationStrategy.SEMANTIC, DeduplicationStrategy.HYBRID):
+    if dedup_config.strategy == DeduplicationStrategy.SEMANTIC:
         try:
             import sentence_transformers  # noqa
         except ImportError:

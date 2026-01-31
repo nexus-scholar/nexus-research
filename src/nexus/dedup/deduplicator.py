@@ -9,15 +9,14 @@ from typing import List
 
 from nexus.core.config import DeduplicationConfig, DeduplicationStrategy as StrategyEnum
 from nexus.core.models import Document, DocumentCluster
-from nexus.dedup.strategies import ConservativeStrategy, HybridStrategy, SemanticStrategy
+from nexus.dedup.strategies import ConservativeStrategy, SemanticStrategy
 
 
 class Deduplicator:
     """Main deduplicator class.
 
     This class coordinates deduplication of documents using various strategies.
-    It supports conservative (exact matching), semantic (embedding-based), and
-    hybrid approaches.
+    It supports conservative (exact matching) and semantic (embedding-based) approaches.
 
     Example:
         >>> from nexus.core.config import DeduplicationConfig, DeduplicationStrategy
@@ -50,8 +49,6 @@ class Deduplicator:
             return ConservativeStrategy(self.config)
         elif self.config.strategy == StrategyEnum.SEMANTIC:
             return SemanticStrategy(self.config)
-        elif self.config.strategy == StrategyEnum.HYBRID:
-            return HybridStrategy(self.config)
         else:
             raise ValueError(f"Unknown deduplication strategy: {self.config.strategy}")
 
