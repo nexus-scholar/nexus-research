@@ -13,19 +13,7 @@ from nexus.dedup.strategies import ConservativeStrategy, SemanticStrategy
 
 
 class Deduplicator:
-    """Main deduplicator class.
-
-    This class coordinates deduplication of documents using various strategies.
-    It supports conservative (exact matching) and semantic (embedding-based) approaches.
-
-    Example:
-        >>> from nexus.core.config import DeduplicationConfig, DeduplicationStrategy
-        >>> from nexus.dedup import Deduplicator
-        >>>
-        >>> config = DeduplicationConfig(strategy=DeduplicationStrategy.CONSERVATIVE)
-        >>> deduplicator = Deduplicator(config)
-        >>> clusters = deduplicator.deduplicate(documents)
-    """
+    """Main deduplicator class."""
 
     def __init__(self, config: DeduplicationConfig):
         """Initialize deduplicator with configuration.
@@ -35,16 +23,10 @@ class Deduplicator:
         """
         self.config = config
         self._strategy = self._create_strategy()
+        self.removed_by_filters = 0
 
     def _create_strategy(self):
-        """Create deduplication strategy based on configuration.
-
-        Returns:
-            Strategy instance
-
-        Raises:
-            ValueError: If strategy is not recognized
-        """
+        """Create deduplication strategy based on configuration."""
         if self.config.strategy == StrategyEnum.CONSERVATIVE:
             return ConservativeStrategy(self.config)
         elif self.config.strategy == StrategyEnum.SEMANTIC:
@@ -52,27 +34,39 @@ class Deduplicator:
         else:
             raise ValueError(f"Unknown deduplication strategy: {self.config.strategy}")
 
-    def deduplicate(self, documents: List[Document]) -> List[DocumentCluster]:
+    def deduplicate(
+        self, 
+        documents: List[Document], 
+        query_metadata: Optional[Dict[str, Any]] = None,
+        progress_callback=None
+    ) -> List[DocumentCluster]:
         """Deduplicate a list of documents.
 
         Args:
             documents: List of documents to deduplicate
+            query_metadata: Optional map of QID -> {include_any, exclude_any}
+            progress_callback: Optional callable(message, percentage)
 
         Returns:
-            List of document clusters, where each cluster contains documents
-            identified as duplicates. Each cluster has a representative document
-            and aggregated metadata.
-
-        Example:
-            >>> clusters = deduplicator.deduplicate(documents)
-            >>> unique_docs = [cluster.representative for cluster in clusters]
-            >>> print(f"Found {len(unique_docs)} unique documents from {len(documents)}")
+            List of document clusters.
         """
         if not documents:
             return []
 
-        # Assign cluster IDs to documents
-        clusters = self._strategy.deduplicate(documents)
+        # 1. Apply Quality Filters (Include/Exclude Keywords)
+        if query_metadata:
+            if progress_callback: progress_callback("Applying quality filters...", 0)
+            filtered_docs, removed = self._apply_quality_filters(documents, query_metadata)
+            self.removed_by_filters = removed
+            documents = filtered_docs
+        else:
+            self.removed_by_filters = 0
+
+        if not documents:
+            return []
+
+        # 2. Assign cluster IDs via Strategy
+        clusters = self._strategy.deduplicate(documents, progress_callback=progress_callback)
 
         # Update documents with their cluster IDs
         for cluster in clusters:
@@ -81,23 +75,70 @@ class Deduplicator:
 
         return clusters
 
-    def get_unique_documents(self, documents: List[Document]) -> List[Document]:
-        """Get unique documents by deduplicating and returning representatives.
+    def _apply_quality_filters(
+        self, documents: List[Document], query_metadata: Dict[str, Any]
+    ) -> tuple[List[Document], int]:
+        """Filter documents based on query-specific inclusion/exclusion criteria."""
+        filtered = []
+        removed = 0
 
-        This is a convenience method that deduplicates and returns only the
-        representative document from each cluster.
+        # Pre-process query_metadata for faster lookup
+        # query_metadata format expected: { "Q01": {"metadata": {"include_any": [...], "exclude_any": [...]}} }
+        # or simplified: { "Q01": {"include_any": [...], "exclude_any": [...]}}
+        
+        for doc in documents:
+            # Get criteria for this document's query
+            q_info = query_metadata.get(doc.query_id, {})
+            # Handle both formats (full query object or just metadata)
+            criteria = q_info.get("metadata", q_info) if isinstance(q_info, dict) else {}
+            
+            include_any = criteria.get("include_any")
+            exclude_any = criteria.get("exclude_any")
+
+            if not include_any and not exclude_any:
+                filtered.append(doc)
+                continue
+
+            search_text = f"{doc.title or ''} {doc.abstract or ''} {doc.venue or ''}".lower()
+            
+            # Exclude check
+            is_excluded = False
+            if exclude_any:
+                for word in exclude_any:
+                    if word.lower() in search_text:
+                        is_excluded = True
+                        break
+            
+            if is_excluded:
+                removed += 1
+                continue
+
+            # Include check
+            if include_any:
+                found = False
+                for word in include_any:
+                    if word.lower() in search_text:
+                        found = True
+                        break
+                if not found:
+                    removed += 1
+                    continue
+
+            filtered.append(doc)
+
+        return filtered, removed
+
+    def get_unique_documents(self, documents: List[Document], progress_callback=None) -> List[Document]:
+        """Get unique documents by deduplicating and returning representatives.
 
         Args:
             documents: List of documents to deduplicate
+            progress_callback: Optional callable(message, percentage)
 
         Returns:
             List of unique documents (one representative per cluster)
-
-        Example:
-            >>> unique_docs = deduplicator.get_unique_documents(documents)
-            >>> print(f"Reduced {len(documents)} to {len(unique_docs)} unique documents")
         """
-        clusters = self.deduplicate(documents)
+        clusters = self.deduplicate(documents, progress_callback=progress_callback)
         return [cluster.representative for cluster in clusters]
 
     def get_statistics(self, clusters: List[DocumentCluster]) -> dict:
