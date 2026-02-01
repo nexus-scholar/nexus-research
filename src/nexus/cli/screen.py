@@ -48,8 +48,8 @@ from nexus.screener.models import ScreeningResult
 @click.option(
     "--model",
     type=str,
-    default="gpt-4o",
-    help="LLM model to use.",
+    default=None,
+    help="LLM model to use. Defaults to LLM_MODEL env var.",
 )
 @click.option(
     "--layered/--no-layered",
