@@ -115,26 +115,28 @@ def _search_provider_worker(
 
         # Execute search
         try:
-            # We convert iterator to list to ensure all results are fetched
-            docs = list(provider_instance.search(query_obj))
+            # Fetch results
+            raw_docs = list(provider_instance.search(query_obj))
             
             # Store translated query
             translated_queries[q_info['id']] = provider_instance.get_last_query()
 
-            if docs:
+            # Hydrate documents with query context
+            for d in raw_docs:
+                d.query_id = q_info['id']
+                d.query_text = q_info['text']
+
+            # Apply post-search quality filters (include_any / exclude_any)
+            filtered_docs = [
+                d for d in raw_docs if _passes_quality_filters(d, q_info)
+            ]
+
+            if filtered_docs:
                 # Save per-query results
-                save_documents(docs, query_file, format="jsonl")
+                save_documents(filtered_docs, query_file, format="jsonl")
 
-                all_provider_docs.extend(docs)
-                provider_total += len(docs)
-            
-        except Exception as e:
-            progress.console.print(
-                f"  [{provider_name}] {q_info['id']}: [red]Error: {e}[/red]"
-            )
-
-        # Update progress bar
-        progress.update(task_id, advance=1)
+                all_provider_docs.extend(filtered_docs)
+                provider_total += len(filtered_docs)
 
     # Save aggregated results
     if all_provider_docs:
