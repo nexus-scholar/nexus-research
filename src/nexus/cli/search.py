@@ -346,10 +346,7 @@ def search(
         enabled_providers = list(provider)
     else:
         # Use all enabled providers from config
-        for prov_name in ["openalex", "crossref", "arxiv", "semantic_scholar"]:
-            prov_config = config.providers.get_provider(prov_name)
-            if prov_config and prov_config.enabled:
-                enabled_providers.append(prov_name)
+        enabled_providers = config.providers.get_enabled_providers()
 
     # Remove skipped providers
     if skip_provider:

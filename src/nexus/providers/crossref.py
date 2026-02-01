@@ -72,7 +72,7 @@ class CrossrefProvider(BaseProvider):
         page_count = 0
         total_fetched = 0
         max_pages = 500  # Safety limit
-        max_results = query.max_results or 1000
+        max_results = query.max_results or float("inf")
 
         logger.info(f"Starting Crossref search: {query.text}")
 
