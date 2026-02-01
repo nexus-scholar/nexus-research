@@ -5,7 +5,7 @@ This module provides the main Deduplicator class that coordinates
 deduplication across different strategies.
 """
 
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from nexus.core.config import DeduplicationConfig, DeduplicationStrategy as StrategyEnum
 from nexus.core.models import Document, DocumentCluster
