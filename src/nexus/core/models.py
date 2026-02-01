@@ -134,6 +134,8 @@ class Document(BaseModel):
 
     # Screening (populated by screener)
     decision: Optional[str] = None
+    screening_reason: Optional[str] = None
+    screening_confidence: Optional[int] = None
 
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = Field(default=None, exclude=True)

@@ -229,8 +229,10 @@ def screen(
         for i, result in enumerate(results_iter):
             original_doc = docs_to_screen[i] # This assumes 1:1 mapping and order preservation
             
-            # Update the document
+            # Update the document with decision and metadata
             original_doc.decision = result.decision.value
+            original_doc.screening_reason = result.reasoning
+            original_doc.screening_confidence = result.confidence
             
             # Save full document
             with open(output_file, "a", encoding="utf-8") as f:
