@@ -75,8 +75,7 @@ class IEEEProvider(BaseProvider):
             params["end_year"] = query.year_max
 
         total_fetched = 0
-        # ... (rest of search loop)
-        max_results = query.max_results or 1000
+        max_results = query.max_results or float("inf")
 
         while total_fetched < max_results:
             try:

@@ -76,7 +76,7 @@ class CoreProvider(BaseProvider):
         }
 
         total_fetched = 0
-        max_results = query.max_results or 1000
+        max_results = query.max_results or float("inf")
 
         while total_fetched < max_results:
             try:

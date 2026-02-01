@@ -1,97 +1,27 @@
-# Nexus Scoping Review: Execution Pipeline
+# SLR Execution Pipeline & Paging Strategy
 
-## 1. Define Scope
-**Goal:** Articulate your research questions and keywords.
-*   **Action:** Create or edit your query configuration file.
-*   **File:** `queries.yml`
-*   **Example:**
-    ```yaml
-    queries:
-      - id: Q01
-        theme: "lightweight_architectures"
-        query: "('MobileNet' OR 'ShuffleNet') AND ('plant disease' OR 'crop')"
-    ```
+## 1. Search Identification Phase
+The search module executes queries in parallel across 8 academic providers. Each provider has a specialized paging strategy to ensure data completeness while respecting API limits.
 
-## 2. Identify Sources
-**Goal:** Select academic databases.
-*   **Action:** Enable relevant providers in the configuration.
-*   **File:** `nexus.yml`
-*   **Supported:** OpenAlex, Semantic Scholar (S2), ArXiv, Crossref.
-*   **Config:**
-    ```yaml
-    providers:
-      openalex: { enabled: true }
-      s2: { enabled: true }
-    ```
+### Provider Paging Specifications
+*   **OpenAlex**: Deep paging via `cursor`. Batch size: 200. Max results: Unlimited.
+*   **Crossref**: Deep paging via `cursor`. Batch size: 100. Max results: Unlimited (Fixed).
+*   **arXiv**: Offset-based (`start`). Cap: 10,000 records (API limit).
+*   **PubMed**: History-based (`WebEnv`). Batch size: 200. Max results: Unlimited.
+*   **CORE**: Offset-based (`offset`). Batch size: 100. Max results: Unlimited (Fixing).
+*   **DOAJ**: Page-based. Batch size: 100. Max results: Unlimited.
+*   **IEEE Xplore**: Offset-based (`start_record`). Batch size: 100. Max results: Unlimited (Fixing).
+*   **Semantic Scholar**: Token-based (Bulk API). Max results: Unlimited.
 
-## 3. Develop Search Strategy
-**Goal:** Refine search strings and filters.
-*   **Action:** Use the `dry-run` feature to test your boolean logic without making API calls.
-*   **Command:**
-    ```bash
-    nexus search --queries queries.yml --dry-run
-    ```
+## 2. Deduplication Phase
+*   **Phase 1 (Exact)**: Matches on DOI and Arxiv ID.
+*   **Phase 2 (Fuzzy)**: Fuzzy title matching (default 97%) within 1-year publication windows.
+*   **Phase 3 (Semantic)**: Embedding-based similarity check (Specter model).
 
-## 4. Execute Searches & Deduplicate
-**Goal:** Retrieve metadata and remove duplicates across databases.
-*   **Step A: Search**
-    ```bash
-    nexus search --queries queries.yml
-    ```
-    *Result:* Raw JSONL files in `results/outputs/`.
-*   **Step B: Deduplicate**
-    ```bash
-    nexus deduplicate --input results/outputs/latest
-    ```
-    *Result:* `representatives.jsonl` in `results/dedup/`.
+## 3. Screening & Retrieval Phase
+*   **AI Screener**: Parallel abstract screening against inclusion criteria.
+*   **PDF Fetcher**: Multi-source retrieval (Direct, Unpaywall, CORE).
 
-## 5. Screen Titles/Abstracts (AI-Assisted)
-**Goal:** Filter irrelevant papers based on inclusion/exclusion criteria.
-*   **Action:** Use the LLM Screener.
-*   **Config:** Set `OPENAI_API_KEY` (or OpenRouter key) in `.env`.
-*   **Command:**
-    ```bash
-    nexus screen --criteria "Include papers focusing on deep learning for plant disease detection. Exclude reviews and non-visual sensors."
-    ```
-    *Result:* `results/screening/screening_....jsonl` (with `decision: include/exclude`).
-
-## 6. Screen Full Texts (Fetch & Validate)
-**Goal:** Obtain full-text PDFs for included papers.
-*   **Step A: Fetch PDFs** (Automatic + SNDL Proxy)
-    ```bash
-    nexus login  # (Once) To capture SNDL cookies
-    nexus fetch --include-only --input results/screening/latest
-    ```
-*   **Step B: Manual Recovery** (Optional)
-    *   If failures exist, generate a report: `python generate_failed_report.py`
-    *   Manually download PDFs to `failed_pdfs/`
-    *   Import them: `python import_manual_pdfs.py`
-
-## 7. Extract Data
-**Goal:** Convert PDFs into structured, machine-readable text (Markdown).
-*   **Command:**
-    ```bash
-    nexus extract --tables --input results/pdfs --output results/extraction
-    ```
-    *Result:* Clean Markdown (`paper_body.md`) and JSON chunks for every paper.
-
-## 8. Synthesize Findings
-**Goal:** Analyze trends, architectures, and datasets across the entire corpus.
-*   **Step A: Batch Analysis** (Extract Models, Accuracy, etc.)
-    ```bash
-    nexus analyze
-    ```
-    *Result:* `analysis_workspace/literature_matrix.csv`
-*   **Step B: Visualization**
-    ```bash
-    nexus visualize
-    ```
-    *Result:* Charts in `analysis_workspace/plots/`.
-
-## 9. Report Results
-**Goal:** Generate the final literature review draft.
-*   **Command:**
-    ```bash
-    nexus synthesize
-    ```
-    *Result:* `analysis_workspace/DRAFT_REVIEW.md` (A complete, cited draft).
+## 4. Synthesis Phase
+*   **Analysis Engine**: Structured metadata extraction from full-text.
+*   **Synthesizer**: Automated PRISMA counts and Literature Review draft generation.
