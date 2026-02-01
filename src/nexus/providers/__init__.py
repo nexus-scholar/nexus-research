@@ -27,6 +27,7 @@ from .base import BaseProvider, ProviderRegistry, get_registry
 from .core import CoreProvider
 from .crossref import CrossrefProvider
 from .doaj import DOAJProvider
+from .ieee import IEEEProvider
 from .openalex import OpenAlexProvider
 from .pubmed import PubMedProvider
 from .query_translator import (
@@ -79,6 +80,7 @@ def get_provider(name: str, config: ProviderConfig) -> BaseProvider:
         "pubmed": PubMedProvider,
         "doaj": DOAJProvider,
         "core": CoreProvider,
+        "ieee": IEEEProvider,
     }
 
     name_lower = name.lower()
@@ -122,4 +124,5 @@ __all__ = [
     "PubMedProvider",
     "DOAJProvider",
     "CoreProvider",
+    "IEEEProvider",
 ]

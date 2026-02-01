@@ -66,6 +66,9 @@ class ProvidersConfig(BaseModel):
     core: ProviderConfig = Field(
         default_factory=lambda: ProviderConfig(enabled=True, rate_limit=1.0)
     )
+    ieee: ProviderConfig = Field(
+        default_factory=lambda: ProviderConfig(enabled=True, rate_limit=1.0)
+    )
     semantic_scholar: ProviderConfig = Field(
         default_factory=lambda: ProviderConfig(enabled=False, rate_limit=1.0), alias="s2"
     )
