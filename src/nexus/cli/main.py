@@ -97,12 +97,15 @@ from nexus.cli.analyze import analyze
 from nexus.cli.visualize import visualize
 from nexus.cli.synthesize import synthesize
 
+from nexus.cli.rank import rank
+
 cli.add_command(init)
 cli.add_command(search)
 cli.add_command(deduplicate)
 cli.add_command(export)
 cli.add_command(validate)
 cli.add_command(screen)
+cli.add_command(rank)
 cli.add_command(fetch)
 cli.add_command(extract)
 cli.add_command(login)
