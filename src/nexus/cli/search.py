@@ -50,6 +50,10 @@ def _passes_quality_filters(doc: Document, q_info: Dict[str, Any]) -> bool:
     # 1. Exclude Filter: If ANY exclude keyword is found, fail.
     if exclude_any:
         for word in exclude_any:
+            # SPECIAL CASE: Don't exclude the provider if we are currently searching it
+            # e.g. if we search arxiv, don't drop it just because venue contains 'arxiv'
+            if word.lower() == doc.provider.lower():
+                continue
             if word.lower() in search_text:
                 return False
 
