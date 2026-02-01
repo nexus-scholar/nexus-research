@@ -10,7 +10,7 @@ mailto: "bekhouche.mouadh@univ-oeb.dz"
 
 # Default year range for all queries (can be overridden per query)
 year_min: 2024
-year_max: 2025
+year_max: 2026
 
 # Default language filter (ISO 639-1 code)
 language: "en"
@@ -71,6 +71,51 @@ deduplication:
   # Maximum allowed year difference between potential duplicates
   max_year_gap: 1
 
+# Screener Heuristics
+# -------------------
+# These lists are used by the layered screener's heuristic pre-filter.
+screener:
+  # If include_groups is set, a document must match at least one term from each group.
+  include_groups:
+    - [
+        "plant", "leaf", "crop", "fruit", "disease", "leaf spot", "rust",
+        "mildew", "blight", "wilt", "tomato", "rice", "wheat", "maize",
+        "banana", "grape", "apple", "potato"
+      ]
+    - [
+        "deep learning", "cnn", "vgg", "resnet", "densenet", "efficientnet",
+        "mobilenet", "convnext", "transformer", "vit", "swin", "yolo",
+        "yolov8", "segmentation", "mask r-cnn", "graph neural network",
+        "attention", "few-shot", "meta-learning", "self-supervised",
+        "semi-supervised", "self-training", "representation learning",
+        "transfer learning", "pruning", "quantization", "lightweight",
+        "edge", "gan", "diffusion", "data augmentation"
+      ]
+  # Used only when include_groups is empty.
+  include_patterns: []
+  exclude_patterns:
+    - "weed"
+    - "insect"
+    - "pest"
+    - "aphid"
+    - "virus"
+    - "fungus"
+    - "remote sensing"
+    - "hyperspectral imaging"
+    - "hyperspectral"
+    - "satellite"
+    - "uav"
+    - "drone"
+    - "aerial"
+    - "weed detection"
+    - "weed control"
+    - "pest detection"
+    - "pest infestation"
+    - "insect pest"
+    - "yield prediction"
+  # Optional per-layer model names; last one is reused for remaining layers.
+  models: []
+
 # Output Configuration
 # ---------------------
 output:
@@ -81,4 +126,4 @@ output:
   format: "csv"
 
   # Include raw JSON response from providers in the output (increases file size)
-  include_raw: false
+  include_raw: true

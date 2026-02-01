@@ -93,6 +93,25 @@ Options:
   --has-doi            Only export with DOI
   --min-year INT       Filter by year
   --output PATH        Output file
+
+### `slr screen` - Screen Papers
+
+Screen papers with an LLM based on title and abstract.
+
+```bash
+slr screen [OPTIONS]
+
+Options:
+  --input PATH             Input file (deduplicated JSONL)
+  --output PATH            Output directory
+  --criteria TEXT          Criteria for single-pass screener
+  --model TEXT             LLM model to use
+  --layered/--no-layered    Use layered screener with heuristic pre-filtering
+  --include-group TEXT      Comma-separated keyword group (repeatable)
+  --include-pattern TEXT    Keyword include pattern (repeatable)
+  --exclude-pattern TEXT    Keyword exclude pattern (repeatable)
+  --layer-model TEXT        Model per layer (repeatable)
+```
 ```
 
 ### `slr validate` - Validate Data
@@ -199,6 +218,12 @@ deduplication:
   strategy: conservative
   fuzzy_threshold: 97
   max_year_gap: 1
+
+screener:
+  include_groups:
+    - ["plant", "leaf", "crop", "disease"]
+    - ["deep learning", "cnn", "vit", "segmentation"]
+  exclude_patterns: ["remote sensing", "aerial"]
 ```
 
 ### Queries File (`queries.yml`)
@@ -366,4 +391,3 @@ MIT License - See LICENSE file for details
 ---
 
 **Made with ❤️ using Click and Rich**
-

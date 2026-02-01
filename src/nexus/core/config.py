@@ -154,6 +154,111 @@ class OutputConfig(BaseModel):
         return v.lower()
 
 
+def _default_screener_include_groups() -> List[List[str]]:
+    return [
+        [
+            "plant",
+            "leaf",
+            "crop",
+            "fruit",
+            "disease",
+            "leaf spot",
+            "rust",
+            "mildew",
+            "blight",
+            "wilt",
+            "tomato",
+            "rice",
+            "wheat",
+            "maize",
+            "banana",
+            "grape",
+            "apple",
+            "potato",
+        ],
+        [
+            "deep learning",
+            "cnn",
+            "vgg",
+            "resnet",
+            "densenet",
+            "efficientnet",
+            "mobilenet",
+            "convnext",
+            "transformer",
+            "vit",
+            "swin",
+            "yolo",
+            "yolov8",
+            "segmentation",
+            "mask r-cnn",
+            "graph neural network",
+            "attention",
+            "few-shot",
+            "meta-learning",
+            "self-supervised",
+            "semi-supervised",
+            "self-training",
+            "representation learning",
+            "transfer learning",
+            "pruning",
+            "quantization",
+            "lightweight",
+            "edge",
+            "gan",
+            "diffusion",
+            "data augmentation",
+        ],
+    ]
+
+
+def _default_screener_exclude_patterns() -> List[str]:
+    return [
+        "weed",
+        "insect",
+        "pest",
+        "aphid",
+        "virus",
+        "fungus",
+        "remote sensing",
+        "hyperspectral imaging",
+        "hyperspectral",
+        "satellite",
+        "uav",
+        "drone",
+        "aerial",
+        "weed detection",
+        "weed control",
+        "pest detection",
+        "pest infestation",
+        "insect pest",
+        "yield prediction",
+    ]
+
+
+class ScreenerConfig(BaseModel):
+    """Configuration for screening heuristics and layered models."""
+
+    include_patterns: List[str] = Field(
+        default_factory=list,
+        description="Simple keyword includes (used when include_groups is empty)",
+    )
+    include_groups: List[List[str]] = Field(
+        default_factory=_default_screener_include_groups,
+        description="Keyword groups; at least one term from each group must match",
+    )
+    exclude_patterns: List[str] = Field(
+        default_factory=_default_screener_exclude_patterns,
+        description="Keyword excludes; any match filters the document out",
+    )
+    models: List[str] = Field(
+        default_factory=list,
+        description="Layered screener model names (one per layer; last reused)",
+    )
+
+    model_config = ConfigDict(extra="allow")
+
+
 class SLRConfig(BaseModel):
     """Main configuration for Simple SLR."""
 
@@ -172,6 +277,9 @@ class SLRConfig(BaseModel):
     )
     classification: ClassificationConfig = Field(
         default_factory=ClassificationConfig, description="Classification settings"
+    )
+    screener: ScreenerConfig = Field(
+        default_factory=ScreenerConfig, description="Screener settings"
     )
     output: OutputConfig = Field(default_factory=OutputConfig, description="Output settings")
 

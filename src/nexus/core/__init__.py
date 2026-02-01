@@ -13,6 +13,7 @@ from .config import (
     OutputConfig,
     ProviderConfig,
     ProvidersConfig,
+    ScreenerConfig,
     SLRConfig,
     create_default_config,
     load_config,
@@ -29,6 +30,7 @@ __all__ = [
     "DeduplicationConfig",
     "ClassificationConfig",
     "OutputConfig",
+    "ScreenerConfig",
     "DeduplicationStrategy",
     "ClassificationMethod",
     # Config utilities

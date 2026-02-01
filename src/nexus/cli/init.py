@@ -58,6 +58,46 @@ deduplication:
   fuzzy_threshold: 97  # 0-100, higher = more strict
   max_year_gap: 1      # Maximum year difference for potential duplicates
 
+# Screener Heuristics
+screener:
+  include_groups:
+    - [
+        "plant", "leaf", "crop", "fruit", "disease", "leaf spot", "rust",
+        "mildew", "blight", "wilt", "tomato", "rice", "wheat", "maize",
+        "banana", "grape", "apple", "potato"
+      ]
+    - [
+        "deep learning", "cnn", "vgg", "resnet", "densenet", "efficientnet",
+        "mobilenet", "convnext", "transformer", "vit", "swin", "yolo",
+        "yolov8", "segmentation", "mask r-cnn", "graph neural network",
+        "attention", "few-shot", "meta-learning", "self-supervised",
+        "semi-supervised", "self-training", "representation learning",
+        "transfer learning", "pruning", "quantization", "lightweight",
+        "edge", "gan", "diffusion", "data augmentation"
+      ]
+  include_patterns: []
+  exclude_patterns:
+    - "weed"
+    - "insect"
+    - "pest"
+    - "aphid"
+    - "virus"
+    - "fungus"
+    - "remote sensing"
+    - "hyperspectral imaging"
+    - "hyperspectral"
+    - "satellite"
+    - "uav"
+    - "drone"
+    - "aerial"
+    - "weed detection"
+    - "weed control"
+    - "pest detection"
+    - "pest infestation"
+    - "insect pest"
+    - "yield prediction"
+  models: []
+
 # Output Settings
 output:
   directory: outputs
