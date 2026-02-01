@@ -40,7 +40,7 @@ class TestParallelSearch(unittest.TestCase):
         mock_progress = MagicMock()
 
         # Run worker
-        count = _search_provider_worker(
+        count, translations = _search_provider_worker(
             "openalex",
             self.config,
             self.queries,
@@ -70,7 +70,7 @@ class TestParallelSearch(unittest.TestCase):
         mock_get_provider.side_effect = Exception("Init failed")
         mock_progress = MagicMock()
 
-        count = _search_provider_worker(
+        count, translations = _search_provider_worker(
             "openalex",
             self.config,
             self.queries,

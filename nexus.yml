@@ -40,6 +40,24 @@ providers:
     enabled: true
     rate_limit: 1.0
 
+  pubmed:
+    enabled: true
+    rate_limit: 3.0
+
+  doaj:
+    enabled: true
+    rate_limit: 2.0
+
+  core:
+    enabled: true
+    api_key: "lzcWJVBjnaqfP5rbHowhYGmZ2X8xEiSt"
+    rate_limit: 1.0
+
+  ieee:
+    enabled: true
+    api_key: "sbtnjtg89w6m2hvk6rutt9wb"
+    rate_limit: 1.0
+
 # Deduplication Settings
 # -----------------------
 deduplication:

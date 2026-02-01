@@ -49,7 +49,7 @@ class TestSearchResume(unittest.TestCase):
         mock_progress = MagicMock()
 
         # Run worker with resume=True
-        count = _search_provider_worker(
+        count, translations = _search_provider_worker(
             "openalex",
             self.config,
             self.queries,
@@ -95,7 +95,7 @@ class TestSearchResume(unittest.TestCase):
         mock_progress = MagicMock()
 
         # Run worker with resume=False
-        count = _search_provider_worker(
+        count, translations = _search_provider_worker(
             "openalex",
             self.config,
             self.queries,
