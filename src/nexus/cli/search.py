@@ -38,6 +38,34 @@ from nexus.core.models import Query, Document
 from nexus.providers import get_provider
 
 
+def _passes_quality_filters(doc: Document, q_info: Dict[str, Any]) -> bool:
+    """Check if document passes include/exclude keyword filters from metadata."""
+    metadata = q_info.get("metadata", {})
+    include_any = metadata.get("include_any")
+    exclude_any = metadata.get("exclude_any")
+
+    # Combine text for searching (Title + Abstract + Venue)
+    search_text = f"{doc.title or ''} {doc.abstract or ''} {doc.venue or ''}".lower()
+
+    # 1. Exclude Filter: If ANY exclude keyword is found, fail.
+    if exclude_any:
+        for word in exclude_any:
+            if word.lower() in search_text:
+                return False
+
+    # 2. Include Filter: If include list exists, at least ONE must be found.
+    if include_any:
+        found = False
+        for word in include_any:
+            if word.lower() in search_text:
+                found = True
+                break
+        if not found:
+            return False
+
+    return True
+
+
 def _search_provider_worker(
     provider_name: str,
     config: SLRConfig,
@@ -100,7 +128,6 @@ def _search_provider_worker(
                     provider_total += len(existing_docs)
                     
                     # Capture the query translation even if resuming
-                    # We run translation but skip the search
                     try:
                         provider_instance._translate_query(query_obj)
                         translated_queries[q_info['id']] = provider_instance.get_last_query()
@@ -110,7 +137,6 @@ def _search_provider_worker(
                     progress.update(task_id, advance=1)
                     continue
             except Exception:
-                # If load fails, ignore and re-run search
                 pass
 
         # Execute search
@@ -137,6 +163,14 @@ def _search_provider_worker(
 
                 all_provider_docs.extend(filtered_docs)
                 provider_total += len(filtered_docs)
+            
+        except Exception as e:
+            progress.console.print(
+                f"  [{provider_name}] {q_info['id']}: [red]Error: {e}[/red]"
+            )
+
+        # Update progress bar
+        progress.update(task_id, advance=1)
 
     # Save aggregated results
     if all_provider_docs:
