@@ -7,7 +7,7 @@ This command uses an LLM to screen papers based on title and abstract.
 import os
 import json
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import click
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskID
@@ -19,8 +19,9 @@ from nexus.cli.formatting import (
     print_success,
 )
 from nexus.cli.main import pass_context
-from nexus.cli.utils import load_documents, get_latest_run
-from nexus.screener.screener import Screener
+from nexus.cli.utils import load_config, load_documents, get_latest_run
+from nexus.core.config import ScreenerConfig
+from nexus.screener.screener import LayeredScreener, Screener
 from nexus.screener.client import LLMClient
 from nexus.screener.models import ScreeningResult
 
@@ -50,6 +51,31 @@ from nexus.screener.models import ScreeningResult
     default="gpt-4o",
     help="LLM model to use.",
 )
+@click.option(
+    "--layered/--no-layered",
+    default=False,
+    help="Use the layered screener with heuristic pre-filtering.",
+)
+@click.option(
+    "--include-group",
+    multiple=True,
+    help="Comma-separated keyword group; at least one term from each group must match.",
+)
+@click.option(
+    "--include-pattern",
+    multiple=True,
+    help="Keyword include patterns (used only when include-groups are empty).",
+)
+@click.option(
+    "--exclude-pattern",
+    multiple=True,
+    help="Keyword exclude patterns; any match filters the document out.",
+)
+@click.option(
+    "--layer-model",
+    multiple=True,
+    help="Model name per layer; last one is reused for remaining layers.",
+)
 @pass_context
 def screen(
     ctx,
@@ -57,6 +83,11 @@ def screen(
     output_dir: Path,
     criteria: str,
     model: str,
+    layered: bool,
+    include_group: tuple[str, ...],
+    include_pattern: tuple[str, ...],
+    exclude_pattern: tuple[str, ...],
+    layer_model: tuple[str, ...],
 ):
     """Screen papers using an LLM.
 
@@ -99,13 +130,24 @@ def screen(
         return
 
     client = LLMClient(api_key=api_key, model=model)
-    screener = Screener(client)
+    config = load_config(ctx.config_path).screener
+    screener_config = _build_screener_config(
+        config,
+        include_group=include_group,
+        include_pattern=include_pattern,
+        exclude_pattern=exclude_pattern,
+        layer_model=layer_model,
+    )
+    if layered:
+        screener = LayeredScreener(client=client, config=screener_config)
+    else:
+        screener = Screener(client)
 
     # Prepare output and resume logic
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"screening_{input_path.parent.name}.jsonl"
     
-    existing_dois = set()
+    screened_keys = set()
     if output_file.exists():
         console.print(f"[yellow]Found existing output file. Resuming...[/yellow]")
         try:
@@ -113,21 +155,38 @@ def screen(
                 for line in f:
                     if line.strip():
                         data = json.loads(line)
-                        if "doi" in data and data["doi"]:
-                            existing_dois.add(data["doi"])
-            console.print(f"  Skipping {len(existing_dois)} already screened papers.")
+                        # Create a unique key from DOI or Title
+                        doi = data.get("external_ids", {}).get("doi")
+                        title = data.get("title", "").lower().strip()
+                        if doi:
+                            screened_keys.add(f"doi:{doi}")
+                        if title:
+                            screened_keys.add(f"title:{title}")
+            console.print(f"  Skipping {len(screened_keys)} (by ID or Title) already screened papers.")
         except Exception as e:
             print_error(f"Error reading existing file: {e}")
 
     # Filter documents
-    docs_to_screen = [d for d in documents if d.external_ids.doi not in existing_dois]
+    def get_doc_keys(d):
+        keys = []
+        if d.external_ids.doi:
+            keys.append(f"doi:{d.external_ids.doi}")
+        if d.title:
+            keys.append(f"title:{d.title.lower().strip()}")
+        return keys
+
+    docs_to_screen = []
+    for d in documents:
+        keys = get_doc_keys(d)
+        if not any(k in screened_keys for k in keys):
+            docs_to_screen.append(d)
     
     if not docs_to_screen:
         print_success("All documents have been screened!")
         return
 
     # Run screening
-    results = []
+    results: List[ScreeningResult] = []
     
     with Progress(
         SpinnerColumn(),
@@ -162,7 +221,12 @@ def screen(
         # I will rely on the fact that I passed docs_to_screen to screen_documents.
         # I will update the Document object with the result.
         
-        for i, result in enumerate(screener.screen_documents(docs_to_screen, criteria=criteria)):
+        if layered:
+            results_iter = screener.screen_documents(docs_to_screen)
+        else:
+            results_iter = screener.screen_documents(docs_to_screen, criteria=criteria)
+
+        for i, result in enumerate(results_iter):
             original_doc = docs_to_screen[i] # This assumes 1:1 mapping and order preservation
             
             # Update the document
@@ -172,8 +236,10 @@ def screen(
             with open(output_file, "a", encoding="utf-8") as f:
                 f.write(original_doc.model_dump_json() + "\n")
             
-            color = "green" if result.decision == "include" else "red" if result.decision == "exclude" else "yellow"
-            progress.console.print(f"  [{color}]{result.decision.upper()}[/{color}] {result.title[:60]}...")
+            results.append(result)
+            decision_value = result.decision.value
+            color = "green" if decision_value == "include" else "red" if decision_value == "exclude" else "yellow"
+            progress.console.print(f"  [{color}]{decision_value.upper()}[/{color}] {result.title[:60]}...")
             progress.advance(task)
 
     print_success(f"Screening complete! Results saved to {output_file}")
@@ -189,3 +255,30 @@ def screen(
     console.print(f"  Include: [green]{counts['include']}[/green]")
     console.print(f"  Maybe:   [yellow]{counts['maybe']}[/yellow]")
     console.print(f"  Exclude: [red]{counts['exclude']}[/red]")
+
+
+def _build_screener_config(
+    config: ScreenerConfig,
+    *,
+    include_group: tuple[str, ...],
+    include_pattern: tuple[str, ...],
+    exclude_pattern: tuple[str, ...],
+    layer_model: tuple[str, ...],
+) -> ScreenerConfig:
+    """Apply CLI overrides to screener config."""
+    updates = {}
+    if include_group:
+        updates["include_groups"] = [_parse_group(group) for group in include_group]
+    if include_pattern:
+        updates["include_patterns"] = list(include_pattern)
+    if exclude_pattern:
+        updates["exclude_patterns"] = list(exclude_pattern)
+    if layer_model:
+        updates["models"] = list(layer_model)
+    if not updates:
+        return config
+    return config.model_copy(update=updates)
+
+
+def _parse_group(raw: str) -> List[str]:
+    return [term.strip() for term in raw.split(",") if term.strip()]
