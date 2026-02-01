@@ -172,7 +172,14 @@ class LayeredScreener:
                     decision=ScreeningDecision.EXCLUDE,
                     confidence=100,
                     reasoning=heuristic_reason,
-                    tags=["heuristic_exclusion"]
+                    tags=["heuristic_exclusion"],
+                    layers=[{
+                        "layer": 0,
+                        "name": "Heuristics",
+                        "decision": "exclude",
+                        "reason": heuristic_reason,
+                        "confidence": 100
+                    }]
                 )
                 continue
 
@@ -181,16 +188,17 @@ class LayeredScreener:
             abstract = doc.abstract or ""
             user_prompt = build_layer_user_prompt(title=title, abstract=abstract)
             reasons: List[str] = []
+            layer_results: List[dict] = []
             final_decision = ScreeningDecision.INCLUDE
             final_confidence = 100
 
             system_prompts = [
-                build_layer1_system_prompt(),
-                build_layer2_system_prompt(),
-                build_layer3_system_prompt(),
+                (1, "Visual Deep Learning", build_layer1_system_prompt()),
+                (2, "Crop & Domain", build_layer2_system_prompt()),
+                (3, "Thematic Contribution", build_layer3_system_prompt()),
             ]
-            for layer_idx, system_prompt in enumerate(system_prompts):
-                model_name = self.models[min(layer_idx, len(self.models) - 1)]
+            for layer_id, layer_name, system_prompt in system_prompts:
+                model_name = self.models[min(layer_id - 1, len(self.models) - 1)]
                 prev_model = self.client.model
                 self.client.model = model_name
                 try:
@@ -202,7 +210,17 @@ class LayeredScreener:
                 finally:
                     self.client.model = prev_model
                 
+                # Record this layer's result
+                layer_data = {
+                    "layer": layer_id,
+                    "name": layer_name,
+                    "decision": result.decision.value,
+                    "reason": result.reasoning,
+                    "confidence": result.confidence
+                }
+                layer_results.append(layer_data)
                 reasons.append(result.reasoning)
+
                 if result.decision == ScreeningDecision.EXCLUDE:
                     final_decision = ScreeningDecision.EXCLUDE
                     final_confidence = min(final_confidence, result.confidence)
@@ -218,4 +236,5 @@ class LayeredScreener:
                 confidence=final_confidence,
                 reasoning=" | ".join(reasons),
                 tags=[],
+                layers=layer_results
             )

@@ -16,3 +16,4 @@ class ScreeningResult(BaseModel):
     confidence: int = Field(..., ge=0, le=100, description="Confidence score 0-100")
     reasoning: str = Field(..., description="Brief explanation for the decision")
     tags: list[str] = Field(default_factory=list, description="Relevant keywords found")
+    layers: list[dict] = Field(default_factory=list, description="Results from individual layers")

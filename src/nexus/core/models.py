@@ -136,6 +136,7 @@ class Document(BaseModel):
     decision: Optional[str] = None
     screening_reason: Optional[str] = None
     screening_confidence: Optional[int] = None
+    screening_layers: List[Dict[str, Any]] = Field(default_factory=list)
 
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = Field(default=None, exclude=True)

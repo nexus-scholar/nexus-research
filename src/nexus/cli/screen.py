@@ -233,6 +233,7 @@ def screen(
             original_doc.decision = result.decision.value
             original_doc.screening_reason = result.reasoning
             original_doc.screening_confidence = result.confidence
+            original_doc.screening_layers = result.layers
             
             # Save full document
             with open(output_file, "a", encoding="utf-8") as f:
