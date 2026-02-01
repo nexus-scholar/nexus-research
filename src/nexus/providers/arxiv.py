@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterator, Optional
 from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
 from nexus.providers.base import BaseProvider
+from nexus.providers.query_translator import BooleanQueryTranslator, QueryField
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,16 @@ class ArxivProvider(BaseProvider):
         if config.rate_limit == 1.0:  # Default value
             self.config.rate_limit = 3.0
             self.rate_limiter.rate = 3.0
+
+        # Field mapping for ArXiv
+        field_map = {
+            QueryField.TITLE: "ti",
+            QueryField.ABSTRACT: "abs",
+            QueryField.AUTHOR: "au",
+            QueryField.VENUE: "jr",
+            QueryField.ANY: "all",
+        }
+        self.translator = BooleanQueryTranslator(field_map=field_map)
 
         logger.info("Initialized arXiv provider")
 
@@ -198,7 +209,7 @@ class ArxivProvider(BaseProvider):
         )
 
     def _translate_query(self, query: Query) -> Dict[str, Any]:
-        """Translate Query to arXiv API parameters.
+        """Translate Query to arXiv API parameters using BooleanQueryTranslator.
 
         Args:
             query: Query object
@@ -206,58 +217,17 @@ class ArxivProvider(BaseProvider):
         Returns:
             Dictionary of arXiv API parameters
         """
-        # Build search query string
-        search_query = self._build_search_query(query.text.strip())
+        # Build search query string using the centralized translator
+        translation = self.translator.translate(query)
+        search_query = translation["q"]
 
         params: Dict[str, Any] = {
             "search_query": search_query,
-            "sortBy": "submittedDate",  # or "relevance", "lastUpdatedDate"
+            "sortBy": "submittedDate",
             "sortOrder": "descending",
         }
 
         return params
-
-    def _build_search_query(self, text: str) -> str:
-        """Build arXiv search query string.
-
-        Args:
-            text: Query text
-
-        Returns:
-            arXiv-formatted search query
-        """
-        # Check if already arXiv syntax (has field prefixes)
-        if self._is_arxiv_syntax(text):
-            return text
-
-        safe_text = text.strip()
-
-        # Check for boolean operators
-        # If present, assume it's a structured boolean query and search 'all' fields
-        if re.search(r"\b(AND|OR|ANDNOT|NOT)\b", safe_text):
-            return f"all:({safe_text})"
-
-        # Otherwise, treat as phrase or keyword list
-        # Search in title, abstract, and all fields using quotes for exact phrase match
-        query_parts = [
-            f'ti:"{safe_text}"',
-            f'abs:"{safe_text}"',
-            f'all:"{safe_text}"',
-        ]
-
-        return "(" + " OR ".join(query_parts) + ")"
-
-    def _is_arxiv_syntax(self, text: str) -> bool:
-        """Check if query text already uses arXiv field syntax.
-
-        Args:
-            text: Query text
-
-        Returns:
-            True if text contains arXiv field prefixes
-        """
-        field_prefixes = ["ti:", "abs:", "all:", "cat:", "au:", "co:"]
-        return any(prefix in text for prefix in field_prefixes)
 
     def _make_request_xml(
         self, url: str, params: Optional[Dict[str, Any]] = None
@@ -272,6 +242,13 @@ class ArxivProvider(BaseProvider):
             Response text (XML)
         """
         import requests
+        from urllib.parse import urlencode
+
+        # Store last query for scientific provenance
+        query_str = f"{url}"
+        if params:
+            query_str = f"{url}?{urlencode(params)}"
+        self._last_query = query_str
 
         # Wait for rate limit
         if not self.rate_limiter.wait_for_token(timeout=30):
@@ -356,8 +333,6 @@ class ArxivProvider(BaseProvider):
         )
 
         # Create Document
-        # Note: raw_data expects Dict[str, Any], but we have XML Element
-        # We'll skip raw_data for arXiv or convert to dict if needed
         doc = Document(
             title=title,
             year=year,
@@ -367,7 +342,7 @@ class ArxivProvider(BaseProvider):
             url=abs_url or id_url,
             external_ids=external_ids,
             provider="arxiv",
-            raw_data=None,  # Skip raw_data since it expects dict, not XML string
+            raw_data=None,
         )
 
         return doc

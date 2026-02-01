@@ -15,30 +15,14 @@ from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
 from nexus.normalization.standardizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.base import BaseProvider
+from nexus.providers.query_translator import BooleanQueryTranslator, QueryField
 from nexus.utils.exceptions import AuthenticationError, ProviderError
 
 logger = logging.getLogger(__name__)
 
 
 class IEEEProvider(BaseProvider):
-    """Provider for IEEE Xplore Metadata Search API.
-
-    IEEE Xplore provides high-quality technical literature.
-    Note: Free tier has a strict daily limit (e.g., 200 calls/day).
-
-    Rate limit:
-    - 10 requests/second
-    - 200 requests/day (typical for free keys)
-
-    Example:
-        >>> config = ProviderConfig(api_key="your_key")
-        >>> provider = IEEEProvider(config)
-        >>> query = Query(text="machine learning", year_min=2020)
-        >>> for doc in provider.search(query):
-        ...     print(doc.title)
-    """
-
-    BASE_URL = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
+    # ... (BASE_URL)
 
     @property
     def name(self) -> str:
@@ -49,11 +33,21 @@ class IEEEProvider(BaseProvider):
         """Initialize IEEE provider."""
         super().__init__(config)
         
-        # Default rate limit (1/s to stay safe)
+        # Default rate limit
         if config.rate_limit == 1.0:
             self.config.rate_limit = 1.0
             self.rate_limiter.rate = 1.0
 
+        # Field mapping for IEEE
+        field_map = {
+            QueryField.TITLE: "article_title",
+            QueryField.ABSTRACT: "abstract",
+            QueryField.AUTHOR: "author",
+            QueryField.VENUE: "publication_title",
+            QueryField.YEAR: "publication_year",
+            QueryField.DOI: "doi",
+        }
+        self.translator = BooleanQueryTranslator(field_map=field_map)
         self.normalizer = ResponseNormalizer(provider_name="ieee")
 
     def search(self, query: Query) -> Iterator[Document]:
@@ -61,9 +55,12 @@ class IEEEProvider(BaseProvider):
         if not self.config.api_key:
             raise AuthenticationError(self.name, "API key is required for IEEE Xplore")
 
+        # Use translator for querytext
+        translation = self.translator.translate(query)
+        
         params = {
             "apikey": self.config.api_key,
-            "querytext": query.text,
+            "querytext": translation["q"],
             "format": "json",
             "max_records": 100,
             "start_record": 1,
@@ -71,13 +68,14 @@ class IEEEProvider(BaseProvider):
             "sort_order": "desc"
         }
 
-        # Add year filters
+        # Add year filters (Starter API specific parameters)
         if query.year_min:
             params["start_year"] = query.year_min
         if query.year_max:
             params["end_year"] = query.year_max
 
         total_fetched = 0
+        # ... (rest of search loop)
         max_results = query.max_results or 1000
 
         while total_fetched < max_results:

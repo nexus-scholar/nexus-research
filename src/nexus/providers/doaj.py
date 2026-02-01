@@ -14,6 +14,7 @@ from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
 from nexus.normalization.standardizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.base import BaseProvider
+from nexus.providers.query_translator import BooleanQueryTranslator, QueryField
 from nexus.utils.exceptions import ProviderError
 
 logger = logging.getLogger(__name__)
@@ -48,14 +49,36 @@ class DOAJProvider(BaseProvider):
     def __init__(self, config: ProviderConfig):
         """Initialize DOAJ provider."""
         super().__init__(config)
+        
+        # Field mapping for DOAJ (Elasticsearch)
+        field_map = {
+            QueryField.TITLE: "bibjson.title",
+            QueryField.ABSTRACT: "bibjson.abstract",
+            QueryField.AUTHOR: "bibjson.author.name",
+            QueryField.VENUE: "bibjson.journal.title",
+            QueryField.YEAR: "bibjson.year",
+            QueryField.DOI: "bibjson.doi",
+        }
+        self.translator = BooleanQueryTranslator(field_map=field_map)
         self.normalizer = ResponseNormalizer(provider_name="doaj")
 
     def search(self, query: Query) -> Iterator[Document]:
         """Execute search on DOAJ."""
-        # DOAJ search syntax: /search/articles/{query}?page=1&pageSize=10
-        # We'll put the query in the path part as suggested by documentation
+        # Use translator
+        translation = self.translator.translate(query)
+        search_text = translation["q"]
         
-        search_text = self._translate_query_text(query)
+        # Handle year range separately for DOAJ range syntax
+        year_filter = ""
+        if query.year_min and query.year_max:
+            year_filter = f" AND bibjson.year:[{query.year_min} TO {query.year_max}]"
+        elif query.year_min:
+            year_filter = f" AND bibjson.year:[{query.year_min} TO 3000]"
+        elif query.year_max:
+            year_filter = f" AND bibjson.year:[1000 TO {query.year_max}]"
+            
+        if year_filter:
+            search_text = f"({search_text}){year_filter}"
         
         page = 1
         page_size = 100
@@ -63,6 +86,7 @@ class DOAJProvider(BaseProvider):
         max_results = query.max_results or 1000
 
         while total_fetched < max_results:
+            # DOAJ expects query in path
             url = f"{self.BASE_URL}/{search_text}"
             params = {
                 "page": page,
@@ -97,35 +121,8 @@ class DOAJProvider(BaseProvider):
 
             page += 1
 
-    def _translate_query_text(self, query: Query) -> str:
-        """Translate Query object to DOAJ/Elasticsearch query string."""
-        # Simple implementation for now
-        # DOAJ supports field:value syntax
-        
-        text = query.text.strip()
-        
-        # Add year filter if present using range syntax
-        # bibjson.year:[2020 TO 2025]
-        year_filter = ""
-        if query.year_min and query.year_max:
-            year_filter = f" AND bibjson.year:[{query.year_min} TO {query.year_max}]"
-        elif query.year_min:
-            year_filter = f" AND bibjson.year:[{query.year_min} TO 3000]"
-        elif query.year_max:
-            year_filter = f" AND bibjson.year:[1000 TO {query.year_max}]"
-
-        # Combine
-        if year_filter:
-            # Wrap original text in parentheses if it's complex
-            if " " in text:
-                return f"({text}){year_filter}"
-            return f"{text}{year_filter}"
-            
-        return text
-
     def _translate_query(self, query: Query) -> Dict[str, Any]:
         """BaseProvider interface - parameters only."""
-        # Not used directly as query text is in path
         return {}
 
     def _normalize_response(self, raw: Dict[str, Any]) -> Optional[Document]:

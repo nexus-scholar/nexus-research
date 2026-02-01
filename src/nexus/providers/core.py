@@ -15,31 +15,14 @@ from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
 from nexus.normalization.standardizer import FieldExtractor, ResponseNormalizer
 from nexus.providers.base import BaseProvider
+from nexus.providers.query_translator import BooleanQueryTranslator, QueryField
 from nexus.utils.exceptions import AuthenticationError, ProviderError
 
 logger = logging.getLogger(__name__)
 
 
 class CoreProvider(BaseProvider):
-    """Provider for CORE API v3.
-
-    CORE provides access to one of the world's largest collections of
-    open access research papers.
-
-    Rate limit: 10 requests per 10 seconds.
-
-    Features:
-    - Focus on Open Access repositories
-    - Aggregated versions of works
-    - Direct PDF download links
-
-    Example:
-        >>> config = ProviderConfig(api_key="your_key")
-        >>> provider = CoreProvider(config)
-        >>> query = Query(text="machine learning", year_min=2020)
-        >>> for doc in provider.search(query):
-        ...     print(doc.title)
-    """
+    """Provider for CORE API v3."""
 
     BASE_URL = "https://api.core.ac.uk/v3"
 
@@ -57,6 +40,16 @@ class CoreProvider(BaseProvider):
             self.config.rate_limit = 1.0
             self.rate_limiter.rate = 1.0
 
+        # Field mapping for CORE
+        field_map = {
+            QueryField.TITLE: "title",
+            QueryField.ABSTRACT: "abstract",
+            QueryField.AUTHOR: "authors.name",
+            QueryField.VENUE: "publisher",
+            QueryField.YEAR: "yearPublished",
+            QueryField.DOI: "doi",
+        }
+        self.translator = BooleanQueryTranslator(field_map=field_map)
         self.normalizer = ResponseNormalizer(provider_name="core")
 
     def search(self, query: Query) -> Iterator[Document]:
@@ -66,9 +59,13 @@ class CoreProvider(BaseProvider):
 
         url = f"{self.BASE_URL}/search/works"
         
+        # Use translator for query string
+        translation = self.translator.translate(query)
+        search_query = translation["q"]
+
         # CORE v3 uses 'q' for query and 'limit'/'offset' for pagination
         params = {
-            "q": self._translate_query_text(query),
+            "q": search_query,
             "limit": 100,
             "offset": 0
         }
@@ -83,8 +80,6 @@ class CoreProvider(BaseProvider):
 
         while total_fetched < max_results:
             try:
-                # Note: CORE supports both GET and POST for search.
-                # BaseProvider._make_request uses GET.
                 response = self._make_request(url, params=params, headers=headers)
             except Exception as e:
                 logger.error(f"CORE search failed: {e}")
@@ -112,31 +107,9 @@ class CoreProvider(BaseProvider):
 
             params["offset"] += len(results)
 
-    def _translate_query_text(self, query: Query) -> str:
-        """Translate Query object to CORE search string."""
-        text = query.text.strip()
-        
-        # Add year filter if present using yearPublished field
-        # CORE uses Lucene-like syntax
-        filters = []
-        if query.year_min and query.year_max:
-            filters.append(f"yearPublished:[{query.year_min} TO {query.year_max}]")
-        elif query.year_min:
-            filters.append(f"yearPublished:[{query.year_min} TO 3000]")
-        elif query.year_max:
-            filters.append(f"yearPublished:[1000 TO {query.year_max}]")
-
-        if filters:
-            filter_str = " AND ".join(filters)
-            if " " in text:
-                return f"({text}) AND {filter_str}"
-            return f"{text} AND {filter_str}"
-            
-        return text
-
     def _translate_query(self, query: Query) -> Dict[str, Any]:
         """BaseProvider interface - parameters only."""
-        return {}
+        return self.translator.translate(query)
 
     def _normalize_response(self, raw: Dict[str, Any]) -> Optional[Document]:
         """Convert CORE JSON result to Document."""
@@ -155,7 +128,6 @@ class CoreProvider(BaseProvider):
             authors = []
             author_list = extractor.get_list("authors")
             for au in author_list:
-                # au can be string or dict with 'name'
                 name = au.get("name") if isinstance(au, dict) else str(au)
                 if not name:
                     continue
@@ -171,15 +143,10 @@ class CoreProvider(BaseProvider):
             abstract = extractor.get_string("abstract")
 
             # Venue
-            venue = None
-            # CORE has 'publisher' or 'source' info in different nested levels
-            # For Works, check 'publisher'
             venue = extractor.get_string("publisher")
 
             # IDs
             doi = extractor.get_string("doi")
-            
-            # CORE ID is the main ID
             core_id = extractor.get_string("id")
 
             # URL

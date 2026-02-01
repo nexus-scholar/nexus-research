@@ -61,6 +61,7 @@ class BaseProvider(ABC):
             raise ValueError("config must be a ProviderConfig instance")
 
         self.config = config
+        self._last_query: Optional[str] = None
 
         # Initialize rate limiter
         self.rate_limiter = TokenBucket(
@@ -80,6 +81,14 @@ class BaseProvider(ABC):
             Provider name from configuration or class name
         """
         return getattr(self.config, "name", self.__class__.__name__.lower())
+
+    def get_last_query(self) -> Optional[str]:
+        """Get the last raw query string sent to the provider.
+
+        Returns:
+            The URL and parameters of the last request, or None
+        """
+        return self._last_query
 
     @abstractmethod
     def search(self, query: Query) -> Iterator[Document]:
@@ -172,6 +181,13 @@ class BaseProvider(ABC):
             AuthenticationError: On authentication failures
         """
         import requests
+        from urllib.parse import urlencode
+
+        # Store last query for scientific provenance
+        query_str = f"{url}"
+        if params:
+            query_str = f"{url}?{urlencode(params)}"
+        self._last_query = query_str
 
         # Wait for rate limit
         if not self.rate_limiter.wait_for_token(timeout=30):

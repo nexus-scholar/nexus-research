@@ -361,6 +361,28 @@ class BooleanQueryTranslator(BaseQueryTranslator):
         }
         self.special_chars = special_chars
 
+    def format_field_term(self, field: str, term: str, is_phrase: bool) -> str:
+        """Format a field and term into a query part.
+
+        Default is field:term or field:"phrase".
+        Subclasses/instances can override this for different syntaxes (e.g. PubMed).
+
+        Args:
+            field: Provider-specific field name
+            term: Escaped search term
+            is_phrase: Whether the term is a phrase
+
+        Returns:
+            Formatted query part
+        """
+        # Handle 'any' field (no prefix if field name is empty or 'any')
+        if not field or field == "any":
+            return f'"{term}"' if is_phrase else term
+
+        if is_phrase:
+            return f'{field}:"{term}"'
+        return f"{field}:{term}"
+
     def translate(self, query: Query) -> Dict[str, Any]:
         """Translate to Boolean query.
 
@@ -381,7 +403,9 @@ class BooleanQueryTranslator(BaseQueryTranslator):
         # Build query string
         query_parts = []
         for token in tokens:
-            if token.is_operator:
+            if token.value in ("(", ")"):
+                query_parts.append(token.value)
+            elif token.is_operator:
                 # Translate operator
                 if token.value in self.operator_map:
                     query_parts.append(self.operator_map[token.value])
@@ -392,12 +416,13 @@ class BooleanQueryTranslator(BaseQueryTranslator):
                 field = self.translate_field(token.field)
                 term = self.escape_special_chars(token.value, self.special_chars)
 
-                if token.is_phrase:
-                    query_parts.append(f'{field}:"{term}"')
-                else:
-                    query_parts.append(f"{field}:{term}")
+                # Format using the new method
+                part = self.format_field_term(field, term, token.is_phrase)
+                query_parts.append(part)
 
+        # Post-process: Remove spaces around parentheses for cleaner syntax
         translated_query = " ".join(query_parts)
+        translated_query = translated_query.replace("( ", "(").replace(" )", ")")
 
         params = {"q": translated_query}
         params.update(self.build_filter_params(query))

@@ -48,8 +48,12 @@ def _search_provider_worker(
     progress: Progress,
     task_id: Any,
     resume: bool = False,
-) -> int:
-    """Worker function to search a single provider."""
+) -> tuple[int, Dict[str, str]]:
+    """Worker function to search a single provider.
+    
+    Returns:
+        Tuple of (total_count, query_id_to_translated_string_map)
+    """
     
     # Get provider config
     prov_config = config.providers.get_provider(provider_name)
@@ -65,7 +69,7 @@ def _search_provider_worker(
         provider_instance = get_provider(provider_name, prov_config)
     except Exception as e:
         progress.console.print(f"[red]Failed to initialize {provider_name}: {e}[/red]")
-        return 0
+        return 0, {}
 
     # Create provider output directory
     provider_dir = output_dir / provider_name
@@ -73,28 +77,10 @@ def _search_provider_worker(
 
     provider_total = 0
     all_provider_docs = []
+    translated_queries = {}
 
     for q_info in all_queries:
         query_file = provider_dir / f"{q_info['id']}_results.jsonl"
-        
-        # Check resume condition
-        if resume and query_file.exists() and query_file.stat().st_size > 0:
-            try:
-                # Load existing documents to maintain counts and aggregation
-                existing_docs = load_documents(query_file)
-                if existing_docs:
-                    all_provider_docs.extend(existing_docs)
-                    provider_total += len(existing_docs)
-                    # progress.console.print(
-                    #     f"  [{provider_name}] {q_info['id']}: Skipped (Resumed {len(existing_docs)} docs)"
-                    # )
-                    progress.update(task_id, advance=1)
-                    continue
-            except Exception:
-                # If load fails, ignore and re-run search
-                pass
-
-        # Check for cancellation/interruption? (not easily possible with threads)
         
         # Create Query object
         query_obj = Query(
@@ -104,10 +90,36 @@ def _search_provider_worker(
             max_results=max_results,
         )
 
+        # Check resume condition
+        if resume and query_file.exists() and query_file.stat().st_size > 0:
+            try:
+                # Load existing documents to maintain counts and aggregation
+                existing_docs = load_documents(query_file)
+                if existing_docs:
+                    all_provider_docs.extend(existing_docs)
+                    provider_total += len(existing_docs)
+                    
+                    # Capture the query translation even if resuming
+                    # We run translation but skip the search
+                    try:
+                        provider_instance._translate_query(query_obj)
+                        translated_queries[q_info['id']] = provider_instance.get_last_query()
+                    except:
+                        pass
+
+                    progress.update(task_id, advance=1)
+                    continue
+            except Exception:
+                # If load fails, ignore and re-run search
+                pass
+
         # Execute search
         try:
             # We convert iterator to list to ensure all results are fetched
             docs = list(provider_instance.search(query_obj))
+            
+            # Store translated query
+            translated_queries[q_info['id']] = provider_instance.get_last_query()
 
             if docs:
                 # Save per-query results
@@ -115,11 +127,6 @@ def _search_provider_worker(
 
                 all_provider_docs.extend(docs)
                 provider_total += len(docs)
-                
-                # Concise logging
-                # progress.console.print(
-                #     f"  [{provider_name}] {q_info['id']}: {len(docs)} results"
-                # )
             
         except Exception as e:
             progress.console.print(
@@ -139,7 +146,7 @@ def _search_provider_worker(
             csv_file = provider_dir / "all_results.csv"
             save_documents(all_provider_docs, csv_file, format="csv")
 
-    return provider_total
+    return provider_total, translated_queries
 
 
 @click.command()
@@ -385,6 +392,7 @@ def search(
 
     # Execute searches
     provider_results: Dict[str, int] = {}
+    query_details: Dict[str, Dict[str, str]] = {}
     
     console.print(f"\n[bold]Starting search execution...[/bold]\n")
 
@@ -428,8 +436,15 @@ def search(
             for future in concurrent.futures.as_completed(futures):
                 prov_name = futures[future]
                 try:
-                    count = future.result()
+                    count, translations = future.result()
                     provider_results[prov_name] = count
+                    
+                    # Merge translations into query_details map: QID -> {provider: string}
+                    for qid, q_str in translations.items():
+                        if qid not in query_details:
+                            query_details[qid] = {}
+                        query_details[qid][prov_name] = q_str
+                        
                 except Exception as e:
                     print_error(f"Provider {prov_name} crashed: {e}")
                     provider_results[prov_name] = 0
@@ -439,6 +454,7 @@ def search(
         "run_id": run_id,
         "timestamp": datetime.now().isoformat(),
         "queries": all_queries,
+        "query_details": query_details, # New field for scientific provenance
         "providers": enabled_providers,
         "config": {
             "year_min": config.year_min,
