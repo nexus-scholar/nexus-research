@@ -25,6 +25,7 @@ Example:
 from .arxiv import ArxivProvider
 from .base import BaseProvider, ProviderRegistry, get_registry
 from .crossref import CrossrefProvider
+from .doaj import DOAJProvider
 from .openalex import OpenAlexProvider
 from .pubmed import PubMedProvider
 from .query_translator import (
@@ -75,6 +76,7 @@ def get_provider(name: str, config: ProviderConfig) -> BaseProvider:
         "semantic_scholar": SemanticScholarProvider,
         "s2": SemanticScholarProvider,  # Alias
         "pubmed": PubMedProvider,
+        "doaj": DOAJProvider,
     }
 
     name_lower = name.lower()
@@ -116,4 +118,5 @@ __all__ = [
     "ArxivProvider",
     "SemanticScholarProvider",
     "PubMedProvider",
+    "DOAJProvider",
 ]
