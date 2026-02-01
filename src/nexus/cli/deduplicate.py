@@ -187,7 +187,16 @@ def deduplicate(
     console.print(f"  Loaded {format_number(len(documents))} documents\n")
 
     # Print configuration
-    # ... (print_config)
+    print_config({
+        "Input": str(input_path),
+        "Documents": format_number(len(documents)),
+        "Strategy": dedup_config.strategy.value,
+        "Fuzzy threshold": f"{dedup_config.fuzzy_threshold}%",
+        "Max year gap": dedup_config.max_year_gap,
+    })
+
+    if dry_run:
+        console.print("\n[yellow]DRY RUN - No files will be modified[/yellow]\n")
 
     # Create deduplicator
     deduplicator = Deduplicator(dedup_config)
@@ -219,7 +228,22 @@ def deduplicate(
     total_docs_after_filters = sum(len(c.members) for c in clusters)
     avg_cluster_size = total_docs_after_filters / num_clusters if num_clusters > 0 else 0
 
-    # ... (Count duplicate types loop)
+    # Count duplicate types
+    exact_doi = 0
+    exact_arxiv = 0
+    fuzzy_title = 0
+
+    for cluster in clusters:
+        if len(cluster.members) > 1:
+            # Check first two members to determine match type
+            m1, m2 = cluster.members[0], cluster.members[1]
+
+            if m1.external_ids.doi and m1.external_ids.doi == m2.external_ids.doi:
+                exact_doi += 1
+            elif m1.external_ids.arxiv_id and m1.external_ids.arxiv_id == m2.external_ids.arxiv_id:
+                exact_arxiv += 1
+            else:
+                fuzzy_title += 1
 
     # Print statistics
     console.print()
@@ -236,7 +260,71 @@ def deduplicate(
     }
     print_statistics(stats, title="Statistics")
 
-    # ... (Duplicates by type)
+    console.print()
+    console.print("[bold]Duplicates by type:[/bold]")
+    if num_duplicates > 0:
+        console.print(f"  Exact DOI matches:    {exact_doi:,} ({exact_doi/num_duplicates*100:.1f}%)")
+        console.print(f"  Exact arXiv matches:  {exact_arxiv:,} ({exact_arxiv/num_duplicates*100:.1f}%)")
+        console.print(f"  Fuzzy title matches:  {fuzzy_title:,} ({fuzzy_title/num_duplicates*100:.1f}%)")
+    else:
+        console.print("  No duplicates found")
+
+    if dry_run:
+        console.print("\n[yellow]Dry run complete - no files written[/yellow]")
+        return
+
+    # Generate output ID
+    dedup_id = generate_dedup_id()
+    output_dir = output_path / dedup_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save clusters (full format with all members)
+    console.print()
+    print_section("Saving results")
+
+    clusters_file = output_dir / "clusters.jsonl"
+    with open(clusters_file, "w", encoding="utf-8") as f:
+        for cluster in clusters:
+            cluster_data = {
+                "cluster_id": cluster.cluster_id,
+                "representative": cluster.representative.model_dump(),
+                "members": [m.model_dump() for m in cluster.members],
+                "size": len(cluster.members),
+            }
+            f.write(json.dumps(cluster_data, ensure_ascii=False) + "\n")
+    console.print(f"  ✓ Clusters: [cyan]{clusters_file}[/cyan]")
+
+    # Save representatives
+    representatives = [c.representative for c in clusters]
+
+    if export_format in ("jsonl", "all"):
+        repr_jsonl = output_dir / "representatives.jsonl"
+        save_documents(representatives, repr_jsonl, format="jsonl")
+        console.print(f"  ✓ Representatives (JSONL): [cyan]{repr_jsonl}[/cyan]")
+
+    if export_format in ("csv", "all"):
+        repr_csv = output_dir / "representatives.csv"
+        save_documents(representatives, repr_csv, format="csv")
+        console.print(f"  ✓ Representatives (CSV): [cyan]{repr_csv}[/cyan]")
+
+    if export_format in ("json", "all"):
+        repr_json = output_dir / "representatives.json"
+        save_documents(representatives, repr_json, format="json")
+        console.print(f"  ✓ Representatives (JSON): [cyan]{repr_json}[/cyan]")
+
+    # Save cluster mapping
+    cluster_mapping = {}
+    for cluster in clusters:
+        cluster_mapping[cluster.cluster_id] = {
+            "representative_title": cluster.representative.title,
+            "member_count": len(cluster.members),
+            "providers": list(set(m.provider for m in cluster.members)),
+        }
+
+    mapping_file = output_dir / "cluster_mapping.json"
+    with open(mapping_file, "w", encoding="utf-8") as f:
+        json.dump(cluster_mapping, f, indent=2, ensure_ascii=False)
+    console.print(f"  ✓ Cluster mapping: [cyan]{mapping_file}[/cyan]")
 
     # Generate PRISMA counts
     prisma_counts = {
@@ -275,7 +363,7 @@ def deduplicate(
             "semantic_threshold": dedup_config.semantic_threshold,
         },
         "statistics": {
-            "input_documents": total_docs,
+            "input_documents": total_docs_initial,
             "unique_documents": num_unique,
             "duplicate_clusters": num_duplicates,
             "average_cluster_size": avg_cluster_size,
@@ -299,8 +387,8 @@ def deduplicate(
         f"Max year gap: {dedup_config.max_year_gap}",
         "",
         "Statistics:",
-        f"  Input documents:     {total_docs:,}",
-        f"  Unique documents:    {num_unique:,} ({num_unique/total_docs*100:.1f}%)",
+        f"  Input documents:     {total_docs_initial:,}",
+        f"  Unique documents:    {num_unique:,} ({num_unique/total_docs_initial*100:.1f}%)",
         f"  Duplicate clusters:  {num_duplicates:,}",
         f"  Average cluster size: {avg_cluster_size:.2f}",
         "",
@@ -319,4 +407,3 @@ def deduplicate(
     console.print(f"  Output: [cyan]{output_dir}[/cyan]")
     console.print(f"  Duration: [cyan]{format_duration(time.time() - start_time)}[/cyan]")
     console.print()
-
