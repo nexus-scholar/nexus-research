@@ -86,6 +86,25 @@ class QueryParser:
     OPERATOR_PATTERN = re.compile(r"\b(AND|OR|NOT)\b", re.IGNORECASE)
     PAREN_PATTERN = re.compile(r"[()]")
 
+    def normalize_text(self, text: str) -> str:
+        """Normalize query text by replacing non-standard characters.
+        
+        Replaces:
+        - Non-breaking hyphens (\u2011) with standard hyphens
+        - Smart quotes with standard quotes
+        """
+        if not text:
+            return ""
+            
+        # Replace non-breaking hyphen
+        text = text.replace("\u2011", "-")
+        
+        # Replace smart quotes
+        text = text.replace("\u201c", '"').replace("\u201d", '"')
+        text = text.replace("\u2018", "'").replace("\u2019", "'")
+        
+        return text
+
     def parse(self, query_text: str) -> List[QueryToken]:
         """Parse query text into tokens.
 
@@ -94,13 +113,10 @@ class QueryParser:
 
         Returns:
             List of QueryToken objects
-
-        Example:
-            >>> parser = QueryParser()
-            >>> tokens = parser.parse('title:"ML" AND deep learning')
-            >>> len(tokens)
-            4
         """
+        # Normalize text first
+        query_text = self.normalize_text(query_text)
+        
         tokens = []
         remaining = query_text
         current_field = None

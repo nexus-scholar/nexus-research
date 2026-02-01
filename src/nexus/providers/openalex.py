@@ -9,7 +9,7 @@ API Documentation: https://docs.openalex.org/
 """
 
 import logging
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from nexus.core.config import ProviderConfig
 from nexus.core.models import Author, Document, ExternalIds, Query
@@ -64,81 +64,139 @@ class OpenAlexProvider(BaseProvider):
 
     def search(self, query: Query) -> Iterator[Document]:
         """Execute search on OpenAlex."""
-        params = self._translate_query(query)
-
-        # Add pagination
-        params["per-page"] = 200  # Max per page
-        params["cursor"] = "*"  # Start cursor
-
-        # Add select fields for efficiency
-        params["select"] = ",".join(
-            [
-                "id",
-                "doi",
-                "title",
-                "display_name",
-                "publication_year",
-                "publication_date",
-                "primary_location",
-                "authorships",
-                "cited_by_count",
-                "biblio",
-                "is_retracted",
-                "type",
-                "open_access",
-                "abstract_inverted_index",
-            ]
-        )
-
-        page = 0
+        # Handle potential query splitting if OR terms > 10
+        query_params_list = self._translate_query_split(query)
+        
         total_retrieved = 0
         max_results = query.max_results or float("inf")
+        seen_ids = set()
 
-        while total_retrieved < max_results:
-            # Make request
-            try:
-                response = self._make_request(
-                    self.BASE_URL, params=params, headers=self._get_headers()
-                )
-            except RateLimitError:
-                logger.warning("Rate limit hit, stopping search")
-                break
-            except ProviderError as e:
-                logger.error(f"Search failed: {e}")
+        for params in query_params_list:
+            if total_retrieved >= max_results:
                 break
 
-            # Extract results
-            results = response.get("results", [])
-            if not results:
-                logger.info("No more results")
-                break
+            # Add pagination
+            params["per-page"] = 200
+            params["cursor"] = "*"
 
-            # Process results
-            for item in results:
-                if total_retrieved >= max_results:
-                    return
+            # Add select fields
+            params["select"] = ",".join([
+                "id", "doi", "title", "display_name", "publication_year",
+                "publication_date", "primary_location", "authorships",
+                "cited_by_count", "biblio", "is_retracted", "type",
+                "open_access", "abstract_inverted_index",
+            ])
 
-                doc = self._normalize_response(item)
-                if doc:
-                    doc.query_id = query.id
-                    doc.query_text = query.text
-                    yield doc
-                    total_retrieved += 1
+            page = 0
+            while total_retrieved < max_results:
+                try:
+                    response = self._make_request(
+                        self.BASE_URL, params=params, headers=self._get_headers()
+                    )
+                except RateLimitError:
+                    logger.warning("Rate limit hit")
+                    break
+                except ProviderError as e:
+                    logger.error(f"Search failed: {e}")
+                    break
 
-            # Check for next page
-            meta = response.get("meta", {})
-            next_cursor = meta.get("next_cursor")
+                results = response.get("results", [])
+                if not results:
+                    break
 
-            if not next_cursor:
-                logger.info(f"Retrieved {total_retrieved} results (no more pages)")
-                break
+                for item in results:
+                    if total_retrieved >= max_results:
+                        return
 
-            params["cursor"] = next_cursor
-            page += 1
+                    doc = self._normalize_response(item)
+                    if doc and doc.provider_id not in seen_ids:
+                        doc.query_id = query.id
+                        doc.query_text = query.text
+                        yield doc
+                        seen_ids.add(doc.provider_id)
+                        total_retrieved += 1
 
-            logger.debug(f"Page {page}: retrieved {len(results)} results")
+                meta = response.get("meta", {})
+                next_cursor = meta.get("next_cursor")
+                if not next_cursor:
+                    break
+
+                params["cursor"] = next_cursor
+                page += 1
 
         logger.info(f"OpenAlex search complete: {total_retrieved} documents")
+
+    def _translate_query_split(self, query: Query) -> List[Dict[str, Any]]:
+        """Translate query, potentially splitting it if it exceeds OpenAlex OR limits."""
+        # Check OR terms count in the query text
+        or_count = query.text.upper().count(" OR ")
+        
+        if or_count < 10:
+            return [self._translate_query(query)]
+            
+        logger.info(f"Query for {self.name} has {or_count+1} OR terms. Splitting into multiple requests.")
+        
+        # Parse tokens
+        tokens = self.translator.parser.parse(query.text)
+        
+        # Identify top-level OR groups to split safely
+        # Strategy: find ORs that are at the same nesting level as the most 'global' OR
+        # For simplicity and robustness, we will perform a primitive split of the OR list
+        # if the query is a simple (A OR B OR C...) format.
+        # If it's complex ( (A OR B) AND (C OR D) ), we need to be careful.
+        
+        # Let's find all OR indices
+        or_indices = [i for i, t in enumerate(tokens) if t.value == "OR"]
+        
+        if not or_indices:
+            return [self._translate_query(query)]
+
+        # Split at the midpoint OR
+        mid_idx = len(or_indices) // 2
+        split_at = or_indices[mid_idx]
+        
+        tokens_a = tokens[:split_at]
+        tokens_b = tokens[split_at+1:]
+        
+        def tokens_to_str(toks):
+            # Helper to balance parentheses in the chunk
+            # If we split "( A OR B OR C )" into "( A OR B" and "C )", 
+            # we must fix them to "( A OR B )" and "( C )"
+            
+            p_balance = 0
+            res_toks = []
+            for t in toks:
+                if t.value == "(": p_balance += 1
+                if t.value == ")": p_balance -= 1
+                res_toks.append(t)
+            
+            # Close open ones
+            while p_balance > 0:
+                res_toks.append(self.translator.parser.parse(")")[0])
+                p_balance -= 1
+            # Open missing ones
+            while p_balance < 0:
+                res_toks.insert(0, self.translator.parser.parse("(")[0])
+                p_balance += 1
+                
+            parts = []
+            for t in res_toks:
+                if t.value in ("(", ")") or t.is_operator:
+                    parts.append(t.value)
+                else:
+                    prefix = ""
+                    if t.field != QueryField.ANY:
+                        prefix = f"{t.field.value}:"
+                    val = f'"{t.value}"' if t.is_phrase else t.value
+                    parts.append(f"{prefix}{val}")
+            
+            return " ".join(parts).replace("( ", "(").replace(" )", ")")
+
+        query_a = query.model_copy(update={"text": tokens_to_str(tokens_a)})
+        query_b = query.model_copy(update={"text": tokens_to_str(tokens_b)})
+        
+        # Recursively split if still too many
+        return self._translate_query_split(query_a) + self._translate_query_split(query_b)
 
     def _translate_query(self, query: Query) -> Dict[str, Any]:
         """Translate Query to OpenAlex parameters using BooleanQueryTranslator."""
