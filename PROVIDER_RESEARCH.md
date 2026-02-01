@@ -56,26 +56,23 @@
 ---
 
 ## 3. CORE
-**Status:** Recommended (largest collection of open access papers)
-**Domain:** Multidisciplinary
+**Status:** Implemented (API v3)
+**Domain:** Multidisciplinary (Open Access Repositories)
 
 ### Technical Details
-*   **API Version:** v2 (v3 announced but documentation sparse).
-*   **Base URL:** `https://core.ac.uk/api-v2`
+*   **API Version:** v3
+*   **Base URL:** `https://api.core.ac.uk/v3`
 *   **Endpoints:**
-    *   `/articles/search/{query}`: Search articles.
-*   **Authentication:** API Key required (Free).
-*   **Rate Limits:**
-    *   General: 10 requests/10 seconds (bursty).
-*   **Search Syntax:**
-    *   Lucene-like syntax.
-    *   Fields: `title:`, `authors:`, `year:`.
+    *   `/search/works`: Unified search for research works.
+*   **Authentication:** `Authorization: Bearer <API_KEY>`
+*   **Rate Limits:** 10 requests / 10 seconds.
+*   **Search Syntax:** Lucene-like. Supports `yearPublished:[2020 TO 2025]`.
 *   **Response Formats:** JSON.
 
 ### Implementation Strategy
-1.  **Registration:** User must provide API Key in config.
-2.  **Search:** Use `/articles/search` endpoint.
-3.  **Normalization:** Map CORE JSON response to `Document`.
+1.  **Direct Integration**: `CoreProvider` uses the `/search/works` endpoint.
+2.  **Rich Metadata**: Extracts `downloadUrl` for direct PDF access.
+3.  **Normalization**: Maps CORE `Work` objects to `Document` model.
 
 ## Recommendation for Next Steps
 1.  **Implement PubMed Provider:** It has the most distinct coverage (biomedical) from existing providers and fits the "plant disease" queries well.
