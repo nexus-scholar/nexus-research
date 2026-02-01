@@ -45,6 +45,11 @@ from nexus.retrieval.fetcher import PDFFetcher
     type=int,
     help="Limit number of downloads (useful for testing).",
 )
+@click.option(
+    "--disable-sndl",
+    is_flag=True,
+    help="Disable institutional proxy (SNDL) retrieval.",
+)
 @pass_context
 def fetch(
     ctx,
@@ -52,6 +57,7 @@ def fetch(
     output_dir: Path,
     include_only: bool,
     limit: Optional[int],
+    disable_sndl: bool,
 ):
     """Fetch full-text PDFs.
 
@@ -109,7 +115,10 @@ def fetch(
     console.print(f"Loaded {len(documents)} documents.")
 
     # Initialize Fetcher
-    fetcher_config = {"email": config.mailto}
+    fetcher_config = {
+        "email": config.mailto,
+        "disable_sndl": disable_sndl
+    }
     fetcher = PDFFetcher(output_dir, config=fetcher_config)
     console.print(f"[bold]Output:[/bold] {output_dir}\n")
 

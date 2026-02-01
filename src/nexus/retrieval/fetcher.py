@@ -26,8 +26,11 @@ class PDFFetcher:
             ArXivSource(self.config),
             UnpaywallSource(self.config),
             OpenAlexSource(self.config),
-            SNDLSource(self.config),
         ]
+        
+        # Add SNDL if not explicitly disabled
+        if not self.config.get("disable_sndl", False):
+            self.sources.append(SNDLSource(self.config))
 
     def get_filename(self, doc: Document) -> str:
         """Generate a safe filename for the document."""
