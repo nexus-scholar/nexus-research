@@ -1,0 +1,390 @@
+version: 1
+project: lit_screener_q1
+queries:
+  # Domain shift and generalization beyond lab datasets
+  - id: DS03
+    theme: domain_shift
+    priority: high
+    query: >
+      ("domain adaptation" OR "domain generalization" OR "cross-domain" OR
+      "dataset bias" OR "cross-dataset")
+      AND ("plant disease" OR "leaf disease" OR phytopathology OR "crop disease")
+      AND (classification OR detection OR diagnosis)
+    include_any:
+      - PlantVillage
+      - PlantDoc
+      - PlantWild
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Robustness and cross‑dataset performance drop in real‑world conditions
+  - id: DS04
+    theme: domain_shift
+    priority: high
+    query: >
+      ("generalization performance" OR robustness OR "performance drop" OR
+      "accuracy drop" OR "out‑of‑distribution generalization")
+      AND ("plant disease" OR "leaf disease")
+      AND ("field images" OR "real‑world" OR "in‑field")
+    include_any:
+      - "real-world"
+      - "field images"
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Lightweight and edge computing architectures for plant disease recognition
+  - id: ARCH_NEW1
+    theme: architecture_lightweight
+    priority: high
+    query: >
+      (lightweight OR "tiny model" OR "edge computing" OR "on‑device" OR
+      TinyML OR microcontroller OR FPGA OR "embedded" OR "edge TPU" OR
+      "AI accelerator")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection)
+    include_any:
+      - MobileNet
+      - MobileViT
+      - EfficientNet
+      - TinyML
+      - FPGA
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Transformer‑based architectures for plant disease recognition
+  - id: ARCH_NEW2
+    theme: architecture_transformer
+    priority: medium
+    query: >
+      ("vision transformer" OR ViT OR "swin transformer" OR
+      "transformer‑based" OR "mobile vision transformer" OR "ConvNeXt")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection OR segmentation)
+    include_any:
+      - ViT
+      - Swin
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Model compression: pruning and quantization for efficient deployment
+  - id: KD_NEW1
+    theme: knowledge_distillation
+    priority: medium
+    query: >
+      ("model compression" OR pruning OR quantization OR
+      "weight pruning" OR "network slimming" OR "low‑rank approximation")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection)
+    include_any:
+      - edge
+      - mobile
+      - IoT
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Self‑supervised and semi‑supervised learning for plant disease diagnosis
+  - id: SSL_FS_NEW1
+    theme: representation_learning
+    priority: medium
+    query: >
+      ("self‑supervised learning" OR "semi‑supervised learning" OR
+      "contrastive learning" OR "self‑training" OR "representation learning")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection)
+    include_any:
+      - PlantVillage
+      - PlantDoc
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Few‑shot and meta‑learning approaches under limited data scenarios
+  - id: SSL_FS_NEW2
+    theme: few_shot_learning
+    priority: medium
+    query: >
+      ("few‑shot learning" OR "meta‑learning" OR "few‑shot classification" OR
+      "transfer learning" OR "zero‑shot")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection)
+    include_any:
+      - "limited data"
+      - "data scarcity"
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Generative models and data augmentation for plant disease datasets
+  - id: GAN_NEW
+    theme: data_augmentation
+    priority: medium
+    query: >
+      ("generative adversarial network" OR GAN OR CycleGAN OR "diffusion model" OR
+      "denoising diffusion" OR "image‑to‑image translation")
+      AND ("plant disease" OR "leaf disease")
+      AND (augmentation OR synthesis OR "data augmentation" OR "data generation")
+    include_any:
+      - CycleGAN
+      - DCGAN
+      - diffusion
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Data quality and label noise in plant disease datasets
+  - id: DC_NEW
+    theme: data_centric
+    priority: medium
+    query: >
+      ("label noise" OR "noisy labels" OR "data cleaning" OR
+      "data‑centric" OR "annotation quality" OR "dataset curation" OR
+      "crowdsourced labels")
+      AND ("plant disease" OR "leaf disease")
+      AND (dataset OR "training data")
+    include_any:
+      - PlantVillage
+      - PlantDoc
+      - PlantWild
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Expanded active learning and human‑in‑the‑loop methods
+  - id: AL_NEW
+    theme: active_learning
+    priority: medium
+    query: >
+      ("active learning" OR "uncertainty sampling" OR "query‑by‑committee" OR
+      "query strategy" OR "interactive labeling" OR "human‑in‑the‑loop" OR
+      "human in the loop")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection)
+    include_any:
+      - "limited labels"
+      - "labeling cost"
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Edge hardware acceleration and embedded deployment for plant disease diagnosis
+  - id: HW_NEW
+    theme: edge_hardware
+    priority: medium
+    query: >
+      (FPGA OR "field‑programmable gate array" OR "edge TPU" OR
+      "AI accelerator" OR microcontroller OR "Raspberry Pi" OR "Jetson Nano" OR
+      "ASIC" OR "hardware accelerator")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection OR recognition)
+    include_any:
+      - real‑time
+      - "on‑device"
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Multimodal sensor fusion for enhanced plant disease recognition
+  - id: MM_NEW
+    theme: multimodal_fusion
+    priority: low
+    query: >
+      (multimodal OR "multi‑modal" OR "RGB‑thermal" OR fusion OR
+      "sensor fusion" OR "multi‑sensor" OR "RGB‑NIR")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR detection)
+    include_any:
+      - RGB
+      - thermal
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review
+
+  # Early detection and severity estimation of plant diseases in time‑series imagery
+  - id: EARLY_NEW
+    theme: disease_monitoring
+    priority: low
+    query: >
+      ("disease severity" OR "severity estimation" OR progression OR
+      "early detection" OR monitoring OR "disease progression")
+      AND ("plant disease" OR "leaf disease")
+      AND (classification OR regression OR monitoring)
+    include_any:
+      - "time series"
+      - progression
+    exclude_any:
+      - hyperspectral
+      - "remote sensing"
+      - satellite
+      - UAV
+      - drone
+      - weed
+      - pest
+      - insect
+      - preprint
+      - arXiv
+      - conference
+      - symposium
+      - workshop
+      - survey
+      - review

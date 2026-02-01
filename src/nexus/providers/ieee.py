@@ -22,7 +22,24 @@ logger = logging.getLogger(__name__)
 
 
 class IEEEProvider(BaseProvider):
-    # ... (BASE_URL)
+    """Provider for IEEE Xplore Metadata Search API.
+
+    IEEE Xplore provides high-quality technical literature.
+    Note: Free tier has a strict daily limit (e.g., 200 calls/day).
+
+    Rate limit:
+    - 10 requests/second
+    - 200 requests/day (typical for free keys)
+
+    Example:
+        >>> config = ProviderConfig(api_key="your_key")
+        >>> provider = IEEEProvider(config)
+        >>> query = Query(text="machine learning", year_min=2020)
+        >>> for doc in provider.search(query):
+        ...     print(doc.title)
+    """
+
+    BASE_URL = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
 
     @property
     def name(self) -> str:
