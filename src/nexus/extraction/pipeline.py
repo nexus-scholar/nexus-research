@@ -121,6 +121,16 @@ def process_pdf_to_chunks(
     resolve_citations: bool = True, # Phase 5
     extract_math: bool = True,      # Phase 4
     extract_tables: bool = True,    # Phase 9
+    enable_ocr: bool = False,
+    ocr_min_chars: int = 200,
+    ocr_lang: str = "eng",
+    ocr_engine: str = "tesseract",
+    ocr_dpi: int = 300,
+    math_ocr: bool = False,
+    math_ocr_engine: str = "pix2tex",
+    inline_math: bool = False,
+    merge_table_continuations: bool = True,
+    split_references: bool = True,
 ) -> ProcessedDocument:
     """
     Process a PDF through the complete pipeline.
@@ -142,6 +152,16 @@ def process_pdf_to_chunks(
         resolve_citations: Whether to parse references and link citations (Phase 5)
         extract_math: Whether to extract math/equations from vector paths (Phase 4)
         extract_tables: Whether to extract and parse tables (Phase 9)
+        enable_ocr: Whether to OCR low-text pages
+        ocr_min_chars: Minimum extracted chars before triggering OCR
+        ocr_lang: OCR language (tesseract)
+        ocr_engine: OCR engine name (currently tesseract)
+        ocr_dpi: Render DPI for OCR
+        math_ocr: Whether to OCR math regions into LaTeX
+        math_ocr_engine: LaTeX OCR engine (pix2tex)
+        inline_math: Whether to append LaTeX blocks to chunk text
+        merge_table_continuations: Merge multi-page tables with matching headers
+        split_references: Whether to detect and split reference sections
 
     Returns:
         ProcessedDocument with all results
@@ -159,13 +179,27 @@ def process_pdf_to_chunks(
             math_dir = output_dir / "math" / pdf_path.stem
 
     # Phase 1: Sanitize (extracts images if requested)
-    sanitized = sanitize_pdf(pdf_path, image_output_dir=image_dir)
+    sanitized = sanitize_pdf(
+        pdf_path,
+        image_output_dir=image_dir,
+        enable_ocr=enable_ocr,
+        ocr_min_chars=ocr_min_chars,
+        ocr_lang=ocr_lang,
+        ocr_engine=ocr_engine,
+        ocr_dpi=ocr_dpi,
+        split_references=split_references,
+    )
 
     # Phase 4: Translator (Math/Equation Extraction)
     # Uses Margin Guard + Stamp Detector to filter logos/watermarks
     math_metadata = []
     if extract_math and math_dir:
-        math_metadata = extract_math_from_pdf(pdf_path, math_dir)
+        math_metadata = extract_math_from_pdf(
+            pdf_path,
+            math_dir,
+            ocr_latex=math_ocr,
+            latex_ocr_engine=math_ocr_engine,
+        )
 
     # Phase 2 & 3: Chunk using appropriate method (with sticky captions)
     if use_page_chunks:
@@ -190,6 +224,13 @@ def process_pdf_to_chunks(
             page = chunk.metadata.get("page_number")
             if page and page in math_by_page:
                 chunk.metadata["potential_math"] = math_by_page[page]
+                if inline_math:
+                    latex_blocks = [
+                        m.get("latex") for m in math_by_page[page] if m.get("latex")
+                    ]
+                    if latex_blocks:
+                        rendered = "\n\n".join(f"\\[{latex}\\]" for latex in latex_blocks)
+                        chunk.text = f"{chunk.text}\n\n{rendered}"
                 
                 # OPTIONAL: Append math text to chunk text for better retrieval?
                 # For now, we just keep it in metadata to avoid messing up the flow.
@@ -225,7 +266,11 @@ def process_pdf_to_chunks(
         try:
             # Smart Strategy + Rotation Detection is now default in extract_tables_from_pdf
             # because we updated it to call extract_tables_from_page (Smart)
-            table_results = extract_tables_from_pdf(pdf_path, find_captions=True)
+            table_results = extract_tables_from_pdf(
+                pdf_path,
+                find_captions=True,
+                merge_continuations=merge_table_continuations,
+            )
 
             if table_results.tables:
                 # Create table chunks and add to main chunks list
@@ -283,12 +328,18 @@ def process_pdf_to_chunks(
                 save_reference_library(reference_library, refs_json_path)
 
             # Save math metadata if we have any
+            math_json_path = output_dir / f"{pdf_path.stem}_math.json"
             if math_metadata:
-                math_json_path = output_dir / f"{pdf_path.stem}_math.json"
                 math_json_path.write_text(
                     json.dumps(math_metadata, indent=2),
                     encoding="utf-8"
                 )
+            else:
+                if math_json_path.exists():
+                    try:
+                        math_json_path.unlink()
+                    except Exception:
+                        pass
 
             # Save table data if we have any (Phase 9)
             if table_results and table_results.tables:
@@ -327,6 +378,16 @@ def process_directory(
     resolve_citations: bool = True,
     extract_math: bool = True,
     extract_tables: bool = True,
+    enable_ocr: bool = False,
+    ocr_min_chars: int = 200,
+    ocr_lang: str = "eng",
+    ocr_engine: str = "tesseract",
+    ocr_dpi: int = 300,
+    math_ocr: bool = False,
+    math_ocr_engine: str = "pix2tex",
+    inline_math: bool = False,
+    merge_table_continuations: bool = True,
+    split_references: bool = True,
 ) -> list[ProcessedDocument]:
     """
     Process all PDFs in a directory.
@@ -340,6 +401,16 @@ def process_directory(
         resolve_citations: Whether to parse references and link citations (Phase 5)
         extract_math: Whether to extract math/equations (Phase 4)
         extract_tables: Whether to extract and parse tables (Phase 9)
+        enable_ocr: Whether to OCR low-text pages
+        ocr_min_chars: Minimum extracted chars before triggering OCR
+        ocr_lang: OCR language (tesseract)
+        ocr_engine: OCR engine name (currently tesseract)
+        ocr_dpi: Render DPI for OCR
+        math_ocr: Whether to OCR math regions into LaTeX
+        math_ocr_engine: LaTeX OCR engine (pix2tex)
+        inline_math: Whether to append LaTeX blocks to chunk text
+        merge_table_continuations: Merge multi-page tables with matching headers
+        split_references: Whether to detect and split reference sections
 
     Returns:
         List of ProcessedDocument results
@@ -362,6 +433,16 @@ def process_directory(
                 resolve_citations=resolve_citations,
                 extract_math=extract_math,
                 extract_tables=extract_tables,
+                enable_ocr=enable_ocr,
+                ocr_min_chars=ocr_min_chars,
+                ocr_lang=ocr_lang,
+                ocr_engine=ocr_engine,
+                ocr_dpi=ocr_dpi,
+                math_ocr=math_ocr,
+                math_ocr_engine=math_ocr_engine,
+                inline_math=inline_math,
+                merge_table_continuations=merge_table_continuations,
+                split_references=split_references,
             )
             results.append(result)
 

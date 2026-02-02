@@ -65,6 +65,52 @@ CAPTION_PATTERN = re.compile(r'^\s*(?:Figure|Fig\.|Table)\s*\d+', re.IGNORECASE)
 # ~4 chars per token is a reasonable approximation for English text
 DEFAULT_MAX_CHARS = 4000  # ~1000 tokens
 
+# Section tagging for downstream LLM extraction
+SECTION_PATTERNS = {
+    "abstract": [r"\babstract\b"],
+    "introduction": [r"\bintroduction\b", r"\bbackground\b", r"\bmotivation\b", r"\bproblem statement\b"],
+    "methods": [
+        r"\bmethods?\b",
+        r"\bmethodology\b",
+        r"\bmaterials and methods\b",
+        r"\bexperimental setup\b",
+        r"\bimplementation\b",
+        r"\bapproach\b",
+        r"\bproposed method\b",
+        r"\bmodel\b",
+        r"\barchitecture\b",
+    ],
+    "results": [r"\bresults?\b", r"\bevaluation\b", r"\bexperiments?\b", r"\bperformance\b"],
+    "discussion": [r"\bdiscussion\b", r"\banalysis\b", r"\binterpretation\b"],
+    "related_work": [r"\brelated work\b", r"\bliterature review\b", r"\bprior work\b"],
+    "conclusion": [r"\bconclusion(s)?\b", r"\bconcluding\b", r"\bsummary\b", r"\bfuture work\b"],
+}
+
+SECTION_PRIORITY = [
+    "abstract",
+    "introduction",
+    "methods",
+    "results",
+    "discussion",
+    "related_work",
+    "conclusion",
+]
+
+
+def infer_section_tags(title: str | None, hierarchy: str | None) -> list[str]:
+    """Infer section tags based on header title and hierarchy text."""
+    haystack = " ".join([title or "", hierarchy or ""]).lower()
+    if not haystack.strip():
+        return []
+
+    tags = []
+    for tag, patterns in SECTION_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, haystack):
+                tags.append(tag)
+                break
+    return tags
+
 
 def generate_chunk_id(content: str, context: str) -> str:
     """
@@ -247,6 +293,7 @@ def chunk_markdown(
         for i, chunk_text in enumerate(text_chunks):
             chunk_id = generate_chunk_id(chunk_text, "")
             chunk_images = extract_images_from_text(chunk_text)
+            section_tags = infer_section_tags("Document", "")
             chunks.append(Chunk(
                 id=chunk_id,
                 text=chunk_text,
@@ -255,6 +302,8 @@ def chunk_markdown(
                     "hierarchy": "",
                     "part": i + 1 if len(text_chunks) > 1 else None,
                     "source_file": source_file,
+                    "section_tags": section_tags,
+                    "section_role": section_tags[0] if section_tags else None,
                 },
                 images=chunk_images,
             ))
@@ -274,6 +323,7 @@ def chunk_markdown(
 
         # Build hierarchy path
         hierarchy = build_header_hierarchy(headers, i)
+        section_tags = infer_section_tags(title, hierarchy)
 
         # Create context-injected text
         context_prefix = f"Section: {hierarchy}\n\n" if hierarchy else ""
@@ -291,6 +341,8 @@ def chunk_markdown(
                 "hierarchy": hierarchy,
                 "header_level": level,
                 "source_file": source_file,
+                "section_tags": section_tags,
+                "section_role": section_tags[0] if section_tags else None,
             }
 
             if len(content_chunks) > 1:
@@ -354,6 +406,8 @@ def chunk_pages(
             # No headers on this page - use accumulated context
             hierarchy_str = " > ".join(current_hierarchy) if current_hierarchy else ""
             context_prefix = f"Section: {hierarchy_str}\n\n" if hierarchy_str else ""
+            section_title = current_hierarchy[-1] if current_hierarchy else "Document"
+            section_tags = infer_section_tags(section_title, hierarchy_str)
 
             # Phase 3: Split with sticky captions
             blocks = split_with_sticky_captions(text.strip())
@@ -365,10 +419,12 @@ def chunk_pages(
                 chunk_images = extract_images_from_text(chunk_text)
 
                 metadata = {
-                    "section": current_hierarchy[-1] if current_hierarchy else "Document",
+                    "section": section_title,
                     "hierarchy": hierarchy_str,
                     "page_number": page_num,
                     "source_file": source_file,
+                    "section_tags": section_tags,
+                    "section_role": section_tags[0] if section_tags else None,
                 }
 
                 if len(text_chunks) > 1:
@@ -403,6 +459,7 @@ def chunk_pages(
                 # Build hierarchy string
                 hierarchy_str = " > ".join(current_hierarchy)
                 context_prefix = f"Section: {hierarchy_str}\n\n" if hierarchy_str else ""
+                section_tags = infer_section_tags(title, hierarchy_str)
 
                 # Phase 3: Split with sticky captions
                 blocks = split_with_sticky_captions(section_content)
@@ -419,6 +476,8 @@ def chunk_pages(
                         "header_level": level,
                         "page_number": page_num,
                         "source_file": source_file,
+                        "section_tags": section_tags,
+                        "section_role": section_tags[0] if section_tags else None,
                     }
 
                     if len(content_chunks) > 1:

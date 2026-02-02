@@ -19,6 +19,8 @@ import pymupdf.layout  # Must be imported first to activate layout feature
 import pymupdf4llm
 import pymupdf
 
+from .ocr import apply_ocr_to_chunks, detect_ocr_pages, tesseract_available
+
 
 # Image filtering constants (Phase 3)
 MIN_IMAGE_WIDTH = 200
@@ -195,6 +197,12 @@ def clean_markdown_images(text: str, valid_images: set[str]) -> str:
 def sanitize_pdf(
     pdf_path: str | Path,
     image_output_dir: str | Path | None = None,
+    enable_ocr: bool = False,
+    ocr_min_chars: int = 200,
+    ocr_lang: str = "eng",
+    ocr_engine: str = "tesseract",
+    ocr_dpi: int = 300,
+    split_references: bool = True,
 ) -> SanitizedDocument:
     """
     Convert a PDF file to structured page-based Markdown.
@@ -234,6 +242,23 @@ def sanitize_pdf(
             image_path=str(image_output_dir) if write_images else None,
             image_format="png",
         )
+
+        # Optional OCR for low-text pages
+        if enable_ocr:
+            if ocr_engine == "tesseract" and not tesseract_available():
+                raise RuntimeError(
+                    "OCR is enabled but tesseract is not installed or not on PATH."
+                )
+            ocr_pages = detect_ocr_pages(raw_chunks, min_chars=ocr_min_chars)
+            if ocr_pages:
+                raw_chunks = apply_ocr_to_chunks(
+                    doc,
+                    raw_chunks,
+                    ocr_pages=ocr_pages,
+                    engine=ocr_engine,
+                    lang=ocr_lang,
+                    dpi=ocr_dpi,
+                )
     finally:
         doc.close()
 
@@ -257,7 +282,7 @@ def sanitize_pdf(
         images = chunk.get("images", [])
         tables = chunk.get("tables", [])
 
-        if not references_started and detect_references_start(text):
+        if split_references and (not references_started) and detect_references_start(text):
             references_started = True
 
         page_chunk = PageChunk(
@@ -265,7 +290,7 @@ def sanitize_pdf(
             text=text.strip(),
             metadata={
                 **metadata,
-                "is_references": references_started,
+                "is_references": references_started if split_references else False,
                 "has_images": len(images) > 0,
                 "has_tables": len(tables) > 0,
                 "image_count": len(images),
@@ -287,17 +312,25 @@ def sanitize_pdf(
 def save_sanitized_document(
     doc: SanitizedDocument,
     output_dir: str | Path,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path | None]:
     """Save markdown files to disk."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     base_name = doc.source_path.stem
     body_path = output_dir / f"{base_name}_body.md"
-    references_path = output_dir / f"{base_name}_references.md"
-
     body_path.write_text(doc.body_text, encoding="utf-8")
-    references_path.write_text(doc.references, encoding="utf-8")
+    references_path = None
+    if doc.references.strip():
+        references_path = output_dir / f"{base_name}_references.md"
+        references_path.write_text(doc.references, encoding="utf-8")
+    else:
+        stale_ref = output_dir / f"{base_name}_references.md"
+        if stale_ref.exists():
+            try:
+                stale_ref.unlink()
+            except Exception:
+                pass
 
     return body_path, references_path
 

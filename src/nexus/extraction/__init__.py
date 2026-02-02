@@ -26,6 +26,13 @@ from .translator import (
     group_math_by_page,
     filter_stamps,
     VisualCandidate,
+    latex_ocr_from_pixmap,
+)
+from .ocr import (
+    ocr_page_text,
+    detect_ocr_pages,
+    apply_ocr_to_chunks,
+    tesseract_available,
 )
 from .table_extractor import (
     extract_tables_from_pdf,
@@ -59,6 +66,12 @@ __all__ = [
     "group_math_by_page",
     "filter_stamps",
     "VisualCandidate",
+    "latex_ocr_from_pixmap",
+    # OCR helpers
+    "ocr_page_text",
+    "detect_ocr_pages",
+    "apply_ocr_to_chunks",
+    "tesseract_available",
     # Phase 5: Librarian
     "build_reference_library",
     "parse_references_markdown",

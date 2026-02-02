@@ -4,11 +4,8 @@ Extraction command.
 Converts PDFs to structured Markdown and chunks using the integrated pipeline.
 """
 
-from pathlib import Path
-from typing import Optional
-
-import os
 import concurrent.futures
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -27,7 +24,23 @@ from nexus.extraction.pipeline import process_pdf_to_chunks
 
 def _process_single_pdf(args):
     """Helper for multiprocessing."""
-    pdf, output_dir, images, math, tables = args
+    (
+        pdf,
+        output_dir,
+        images,
+        math,
+        tables,
+        enable_ocr,
+        ocr_min_chars,
+        ocr_lang,
+        ocr_engine,
+        ocr_dpi,
+        math_ocr,
+        math_ocr_engine,
+        inline_math,
+        merge_table_continuations,
+        split_references,
+    ) = args
     try:
         paper_output_dir = output_dir / pdf.stem
         paper_output_dir.mkdir(exist_ok=True)
@@ -39,7 +52,17 @@ def _process_single_pdf(args):
             extract_math=math,
             extract_tables=tables,
             resolve_citations=False,
-            save_intermediate=True
+            save_intermediate=True,
+            enable_ocr=enable_ocr,
+            ocr_min_chars=ocr_min_chars,
+            ocr_lang=ocr_lang,
+            ocr_engine=ocr_engine,
+            ocr_dpi=ocr_dpi,
+            math_ocr=math_ocr,
+            math_ocr_engine=math_ocr_engine,
+            inline_math=inline_math,
+            merge_table_continuations=merge_table_continuations,
+            split_references=split_references,
         )
         return True, None
     except Exception as e:
@@ -76,6 +99,66 @@ def _process_single_pdf(args):
     help="Extract tables.",
 )
 @click.option(
+    "--scientific/--no-scientific",
+    default=False,
+    help="Use a scientific extraction profile (OCR + LaTeX math + tables, no images).",
+)
+@click.option(
+    "--ocr/--no-ocr",
+    default=False,
+    help="Enable OCR on low-text pages.",
+)
+@click.option(
+    "--ocr-min-chars",
+    type=int,
+    default=200,
+    help="Minimum characters before triggering OCR for a page.",
+)
+@click.option(
+    "--ocr-lang",
+    type=str,
+    default="eng",
+    help="OCR language (tesseract).",
+)
+@click.option(
+    "--ocr-engine",
+    type=click.Choice(["tesseract"], case_sensitive=False),
+    default="tesseract",
+    help="OCR engine to use.",
+)
+@click.option(
+    "--ocr-dpi",
+    type=int,
+    default=300,
+    help="DPI for OCR rendering.",
+)
+@click.option(
+    "--math-ocr/--no-math-ocr",
+    default=False,
+    help="OCR math regions into LaTeX (pix2tex).",
+)
+@click.option(
+    "--math-ocr-engine",
+    type=click.Choice(["pix2tex"], case_sensitive=False),
+    default="pix2tex",
+    help="Math OCR engine to use.",
+)
+@click.option(
+    "--inline-math/--no-inline-math",
+    default=False,
+    help="Append LaTeX math blocks to text chunks.",
+)
+@click.option(
+    "--merge-table-continuations/--no-merge-table-continuations",
+    default=True,
+    help="Merge multi-page tables with matching headers.",
+)
+@click.option(
+    "--split-references/--no-split-references",
+    default=True,
+    help="Detect and split references section from body text.",
+)
+@click.option(
     "--limit",
     type=int,
     help="Limit number of PDFs to process.",
@@ -94,6 +177,17 @@ def extract(
     images: bool,
     math: bool,
     tables: bool,
+    scientific: bool,
+    ocr: bool,
+    ocr_min_chars: int,
+    ocr_lang: str,
+    ocr_engine: str,
+    ocr_dpi: int,
+    math_ocr: bool,
+    math_ocr_engine: str,
+    inline_math: bool,
+    merge_table_continuations: bool,
+    split_references: bool,
     limit: Optional[int],
     workers: Optional[int],
 ):
@@ -103,6 +197,16 @@ def extract(
     Uses parallel processing for speed.
     """
     print_header("Nexus Extract", "PDF to Structured Text")
+
+    if scientific:
+        images = False
+        math = True
+        tables = True
+        ocr = True
+        math_ocr = True
+        inline_math = True
+        merge_table_continuations = True
+        split_references = False
 
     if not input_dir.exists():
         print_error(f"Input directory not found: {input_dir}")
@@ -122,7 +226,12 @@ def extract(
     
     console.print(f"[bold]Input:[/bold] {input_dir} ({len(pdf_files)} PDFs)")
     console.print(f"[bold]Output:[/bold] {output_dir}")
-    console.print(f"[bold]Features:[/bold] Images={images}, Math={math}, Tables={tables}")
+    console.print(
+        "[bold]Features:[/bold] "
+        f"Images={images}, Math={math}, Tables={tables}, OCR={ocr}, "
+        f"MathOCR={math_ocr}, InlineMath={inline_math}, MergeTables={merge_table_continuations}, "
+        f"SplitReferences={split_references}"
+    )
     console.print(f"[bold]Workers:[/bold] {max_workers}\n")
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -131,7 +240,26 @@ def extract(
     stats = {"success": 0, "failed": 0}
     
     # Prepare arguments for each task
-    tasks = [(pdf, output_dir, images, math, tables) for pdf in pdf_files]
+    tasks = [
+        (
+            pdf,
+            output_dir,
+            images,
+            math,
+            tables,
+            ocr,
+            ocr_min_chars,
+            ocr_lang,
+            ocr_engine,
+            ocr_dpi,
+            math_ocr,
+            math_ocr_engine,
+            inline_math,
+            merge_table_continuations,
+            split_references,
+        )
+        for pdf in pdf_files
+    ]
     
     with Progress(
         SpinnerColumn(),

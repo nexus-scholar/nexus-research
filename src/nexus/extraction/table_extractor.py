@@ -48,6 +48,12 @@ from typing import Any
 
 import pymupdf
 
+# Optional fuzzy matching for header similarity
+try:
+    from rapidfuzz import fuzz
+    HAS_RAPIDFUZZ = True
+except Exception:
+    HAS_RAPIDFUZZ = False
 # Try to import pymupdf4llm for enhanced extraction
 try:
     import pymupdf4llm
@@ -857,6 +863,7 @@ def extract_tables_from_pdf(
     pages: list[int] | None = None,
     find_captions: bool = True,
     use_markdown_fallback: bool = True,
+    merge_continuations: bool = True,
 ) -> TableExtractionResult:
     """
     Extract all tables from a PDF document.
@@ -919,6 +926,9 @@ def extract_tables_from_pdf(
             if page_tables:
                 pages_with_tables.append(page_number)
                 all_tables.extend(page_tables)
+
+        if merge_continuations and all_tables:
+            all_tables = merge_table_continuations(all_tables)
 
         return TableExtractionResult(
             tables=all_tables,
@@ -1035,3 +1045,111 @@ def tables_to_chunks(
         chunks.append(chunk)
 
     return chunks
+
+
+def _normalize_header_cell(text: str) -> str:
+    return re.sub(r"\W+", " ", text.lower()).strip()
+
+
+def _header_signature(headers: list[str]) -> str:
+    return " | ".join(_normalize_header_cell(h) for h in headers if h)
+
+
+def _header_similarity(a: list[str], b: list[str]) -> float:
+    if not a or not b:
+        return 0.0
+    sig_a = _header_signature(a)
+    sig_b = _header_signature(b)
+    if not sig_a or not sig_b:
+        return 0.0
+    if HAS_RAPIDFUZZ:
+        return fuzz.token_set_ratio(sig_a, sig_b) / 100.0
+    # Fallback: crude overlap ratio
+    set_a = set(sig_a.split())
+    set_b = set(sig_b.split())
+    if not set_a or not set_b:
+        return 0.0
+    return len(set_a & set_b) / max(len(set_a), len(set_b))
+
+
+def _extract_table_number(caption: str) -> str | None:
+    if not caption:
+        return None
+    match = re.search(r"Table\s+([IVX]+|\d+)", caption, re.IGNORECASE)
+    return match.group(1).lower() if match else None
+
+
+def _row_matches_headers(row: list[str], headers: list[str]) -> bool:
+    if not headers or not row:
+        return False
+    normalized_row = [_normalize_header_cell(c) for c in row]
+    normalized_headers = [_normalize_header_cell(h) for h in headers]
+    return normalized_row == normalized_headers
+
+
+def _is_continuation(prev: ExtractedTable, current: ExtractedTable) -> bool:
+    if current.page_number != prev.page_number + 1:
+        return False
+
+    prev_num = _extract_table_number(prev.caption)
+    curr_num = _extract_table_number(current.caption)
+
+    if curr_num and prev_num and curr_num != prev_num:
+        return False
+
+    caption_text = (current.caption or "").lower()
+    if "continued" in caption_text:
+        return True
+
+    if prev_num and curr_num == prev_num:
+        return True
+
+    if not current.caption:
+        similarity = _header_similarity(prev.headers, current.headers)
+        return similarity >= 0.85
+
+    return False
+
+
+def _merge_tables(prev: ExtractedTable, current: ExtractedTable) -> ExtractedTable:
+    rows = list(prev.rows)
+    current_rows = list(current.rows)
+
+    # Drop duplicated header row if present
+    if current_rows and _row_matches_headers(current_rows[0], prev.headers):
+        current_rows = current_rows[1:]
+
+    rows.extend(current_rows)
+
+    col_count = max(prev.col_count, current.col_count)
+    return ExtractedTable(
+        table_id=prev.table_id,
+        page_number=prev.page_number,
+        row_count=len(rows),
+        col_count=col_count,
+        headers=prev.headers or current.headers,
+        rows=rows,
+        bbox=prev.bbox,
+        caption=prev.caption or current.caption,
+        source_file=prev.source_file,
+    )
+
+
+def merge_table_continuations(tables: list[ExtractedTable]) -> list[ExtractedTable]:
+    """Merge multi-page table continuations using header and caption heuristics."""
+    if not tables:
+        return tables
+
+    tables_sorted = sorted(tables, key=lambda t: (t.source_file, t.page_number, t.table_id))
+    merged: list[ExtractedTable] = []
+    prev: ExtractedTable | None = None
+
+    for table in tables_sorted:
+        if prev and _is_continuation(prev, table):
+            prev = _merge_tables(prev, table)
+            merged[-1] = prev
+            continue
+        merged.append(table)
+        prev = table
+
+    return merged

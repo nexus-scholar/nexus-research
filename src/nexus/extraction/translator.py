@@ -15,10 +15,13 @@ Strategy:
 6. Extract these regions as screenshots.
 """
 
-import pymupdf as fitz
-from pathlib import Path
-from dataclasses import dataclass
+import io
+import re
 from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+
+import pymupdf as fitz
 
 
 # =============================================================================
@@ -228,6 +231,10 @@ def extract_equation_candidates(
         if w < 15 or h < 8:
             continue
 
+        # Drop very small regions (likely icons)
+        if (w * h) < 1200:
+            continue
+
         # Equations are usually wider than tall (fractions can be taller)
         # Very tall narrow regions are likely decorative lines
         aspect = w / h if h > 0 else 0
@@ -248,6 +255,10 @@ def extract_equation_candidates(
         # Clean up text (remove excessive whitespace)
         text_content = " ".join(text_content.split())
 
+        if text_content and not _looks_like_math_text(text_content):
+            # Skip decorative or header-like text regions
+            continue
+
         final_candidates.append(VisualCandidate(
             page_number=page_index + 1,  # 1-indexed for consistency
             bbox=box,
@@ -264,6 +275,9 @@ def save_candidates(
     output_dir: Path,
     dpi: int = 300,
     padding: int = 5,
+    ocr_latex: bool = False,
+    latex_ocr_engine: str = "pix2tex",
+    drop_invalid_latex: bool = True,
 ) -> list[dict]:
     """
     Save the candidate regions as high-resolution images.
@@ -313,14 +327,30 @@ def save_candidates(
         except Exception:
             continue
 
-        metadata_list.append({
+        metadata = {
             "filename": filename,
             "page": cand.page_number,
             "bbox": list(cand.bbox),
             "type": cand.type,
             "width": cand.width,
             "height": cand.height,
-        })
+        }
+
+        if ocr_latex:
+            try:
+                latex = latex_ocr_from_pixmap(pix, engine=latex_ocr_engine)
+                if latex and _looks_like_latex_math(latex):
+                    metadata["latex"] = latex
+                else:
+                    metadata["latex_invalid"] = True
+                    if drop_invalid_latex:
+                        continue
+            except Exception as e:
+                metadata["latex_error"] = str(e)
+                if drop_invalid_latex:
+                    continue
+
+        metadata_list.append(metadata)
 
     return metadata_list
 
@@ -329,6 +359,8 @@ def extract_math_from_pdf(
     pdf_path: str | Path,
     output_dir: str | Path,
     known_image_bboxes_by_page: dict[int, list[tuple]] | None = None,
+    ocr_latex: bool = False,
+    latex_ocr_engine: str = "pix2tex",
 ) -> list[dict]:
     """
     Extract all equation candidates from a PDF.
@@ -350,6 +382,9 @@ def extract_math_from_pdf(
 
     if known_image_bboxes_by_page is None:
         known_image_bboxes_by_page = {}
+
+    if ocr_latex:
+        _ensure_latex_ocr_available(latex_ocr_engine)
 
     doc = fitz.open(str(pdf_path))
 
@@ -375,12 +410,137 @@ def extract_math_from_pdf(
         # Pass 3: Save filtered candidates
         all_metadata = []
         if filtered_candidates:
-            all_metadata = save_candidates(doc, filtered_candidates, output_dir)
+            all_metadata = save_candidates(
+                doc,
+                filtered_candidates,
+                output_dir,
+                ocr_latex=ocr_latex,
+                latex_ocr_engine=latex_ocr_engine,
+                drop_invalid_latex=True,
+            )
 
     finally:
         doc.close()
 
     return all_metadata
+
+
+_LATEX_OCR = None
+
+
+def _ensure_latex_ocr_available(engine: str) -> None:
+    if engine != "pix2tex":
+        raise ValueError(f"Unsupported LaTeX OCR engine: {engine}")
+    try:
+        from pix2tex.cli import LatexOCR  # noqa: F401
+        from PIL import Image  # noqa: F401
+    except Exception as e:
+        raise RuntimeError(
+            "LaTeX OCR engine not available. Install pix2tex and pillow. "
+            "Example: pip install pix2tex pillow"
+        ) from e
+
+
+def latex_ocr_from_pixmap(pix: fitz.Pixmap, engine: str = "pix2tex") -> str:
+    """Convert a rendered pixmap to LaTeX using a local OCR engine."""
+    if engine != "pix2tex":
+        raise ValueError(f"Unsupported LaTeX OCR engine: {engine}")
+
+    try:
+        from pix2tex.cli import LatexOCR
+    except Exception as e:
+        raise RuntimeError(
+            "LaTeX OCR engine not available. Install pix2tex and pillow. "
+            "Example: pip install pix2tex pillow"
+        ) from e
+
+    try:
+        from PIL import Image
+    except Exception as e:
+        raise RuntimeError(
+            "Pillow is required for LaTeX OCR. Install with: pip install pillow"
+        ) from e
+
+    global _LATEX_OCR
+    if _LATEX_OCR is None:
+        _LATEX_OCR = LatexOCR()
+
+    image = Image.open(io.BytesIO(pix.tobytes("png")))
+    return str(_LATEX_OCR(image)).strip()
+
+
+def _looks_like_math_text(text: str) -> bool:
+    """Heuristic to reject header/logo text from math candidates."""
+    if not text:
+        return False
+
+    if re.search(r"[=<>±+\-×*/^_]", text):
+        return True
+    if re.search(r"[∑∏∫√≈≤≥]", text):
+        return True
+    if re.search(r"[\u0370-\u03FF]", text):
+        return True  # Greek
+    if re.search(r"\d", text) and re.search(r"[()\[\]]", text):
+        return True
+    if re.fullmatch(r"[A-Za-z\s]{6,}", text):
+        return False
+    return bool(re.search(r"\d", text))
+
+
+def _looks_like_latex_math(latex: str) -> bool:
+    latex = latex.strip()
+    if len(latex) < 2:
+        return False
+    if len(latex) > 500:
+        return False
+
+    has_digit = bool(re.search(r"\d", latex))
+    has_operator = bool(re.search(r"[=<>±+\-*/^_]", latex))
+
+    common_cmds = (
+        "\\frac",
+        "\\sum",
+        "\\int",
+        "\\sqrt",
+        "\\alpha",
+        "\\beta",
+        "\\gamma",
+        "\\delta",
+        "\\theta",
+        "\\lambda",
+        "\\mu",
+        "\\nu",
+        "\\pi",
+        "\\rho",
+        "\\sigma",
+        "\\tau",
+        "\\phi",
+        "\\psi",
+        "\\omega",
+        "\\cdot",
+        "\\times",
+        "\\mathbb",
+        "\\mathbf",
+        "\\mathrm",
+    )
+    has_common = any(cmd in latex for cmd in common_cmds)
+
+    if has_common and (has_digit or has_operator):
+        return True
+    if has_common and not (has_digit or has_operator):
+        if latex.count("\\mathrm") >= 2:
+            return False
+
+    if has_digit and (has_operator or "\\cdot" in latex or "\\times" in latex):
+        return True
+
+    letters = re.findall(r"[A-Za-z]", latex)
+    nonspace = re.findall(r"[^\s]", latex)
+    if nonspace:
+        if (len(letters) / len(nonspace)) > 0.8 and not (has_digit or has_operator):
+            return False
+
+    return has_operator or has_digit
 
 
 def filter_stamps(candidates: list[VisualCandidate]) -> list[VisualCandidate]:

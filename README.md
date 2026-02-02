@@ -101,6 +101,13 @@ Convert PDFs to Markdown for analysis.
 ```bash
 nexus extract --tables --images
 ```
+For scientific extraction (clean text + LaTeX math + tables, no references/images):
+```bash
+nexus extract --scientific
+```
+Chunks emitted by the extractor now include `section_tags`/`section_role` metadata
+so downstream LLM/SLM field extraction (e.g., `full_text_extraction_schema.yaml`)
+can target Introduction/Methods/Results/Discussion sections with fewer tokens.
 
 **Step 6: Synthesize & Visualize**
 Perform batch analysis and generate automated review drafts.
