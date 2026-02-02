@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+import os
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -141,6 +142,45 @@ GROUP_TEMPLATES = {
         "- reproducibility\n"
         "- peer_review_status\n\n"
         "Only use the excerpt; if missing, use \"NR\"."
+    ),
+}
+
+GROUP_INSTRUCTIONS = {
+    "group1_context": (
+        "Extract the following fields from each paper:\n"
+        "- research_objective\n"
+        "- hypotheses\n"
+        "- task_type (classification, detection, segmentation, severity estimation, or other)\n"
+        "- crop_species (list)\n"
+        "- disease_names (list)\n"
+    ),
+    "group2_data": (
+        "Extract dataset and data handling details:\n"
+        "- datasets: list of objects {name, domain (lab/field/mixed/NR), samples, classes}\n"
+        "- data_collection\n"
+        "- train_test_split\n"
+        "- augmentation_methods (list)\n"
+    ),
+    "group3_models": (
+        "Extract models and training strategies:\n"
+        "- architectures: list of objects {architecture, pretrained (true/false), variant}\n"
+        "- training_details: {optimizer, learning_rate, epochs, batch_size, regularization}\n"
+        "- domain_shift_handling (list)\n"
+        "- model_compression (list)\n"
+        "- generative_augmentation (list)\n"
+        "- data_centric_methods (list)\n"
+    ),
+    "group4_eval": (
+        "Extract evaluation and deployment details:\n"
+        "- evaluation_metrics: {accuracy, precision, recall, f1_score, mAP, IoU, cross_dataset, others}\n"
+        "- cross_dataset_evaluation\n"
+        "- inference_performance: {latency_ms, throughput_fps, model_size_mb, memory_usage_mb}\n"
+        "- hardware_deployment\n"
+        "- explainability_methods (list)\n"
+        "- limitations\n"
+        "- future_work\n"
+        "- reproducibility\n"
+        "- peer_review_status\n"
     ),
 }
 
@@ -302,6 +342,19 @@ class FullTextExtractor:
             self._client = LLMClient(model=self.config.model)
         return self._client
 
+    def _client_for_group(self, group_id: str) -> LLMClient:
+        if not self.config.group_clients:
+            return self.client
+        override = self.config.group_clients.get(group_id)
+        if not override:
+            return self.client
+        api_key = None
+        api_key_env = override.get("api_key_env") if isinstance(override, dict) else None
+        if api_key_env:
+            api_key = os.getenv(api_key_env)
+        base_url = override.get("base_url") if isinstance(override, dict) else None
+        return LLMClient(api_key=api_key, base_url=base_url, model=self.config.model)
+
     def _get_groups(self, schema: SchemaSpec) -> list[ExtractionGroup]:
         groups: list[ExtractionGroup] = []
         group_definitions = DEFAULT_GROUPS
@@ -399,6 +452,27 @@ class FullTextExtractor:
 
         return {"extraction": results, "meta": meta}
 
+    def _build_batch_prompt(
+        self,
+        group: ExtractionGroup,
+        items: list[dict[str, Any]],
+    ) -> str:
+        instruction = GROUP_INSTRUCTIONS.get(group.group_id, "Extract the fields listed.")
+        prompt = (
+            "You will extract fields for multiple papers. "
+            "Use only the provided text. If a field is not reported, output \"NR\". "
+            "Return a JSON object with key \"items\" as a list of objects. "
+            "Each item must include \"paper_id\" plus the requested fields.\n\n"
+        )
+        prompt += instruction
+        if self.config.require_evidence:
+            prompt += "\nInclude an 'evidence' object mapping field -> short supporting snippet."
+        prompt += "\n\n"
+
+        for item in items:
+            prompt += f"<<<PAPER id={item['paper_id']}>>>\n{item['excerpt']}\n<<<END>>>\n\n"
+        return prompt
+
     def extract_from_directory(
         self,
         input_dir: Path,
@@ -407,7 +481,7 @@ class FullTextExtractor:
         schema = load_schema(self.config.schema_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        outputs = []
+        outputs: list[dict[str, Any]] = []
         existing_ids = set()
         if output_path.exists() and self.config.resume:
             try:
@@ -417,6 +491,8 @@ class FullTextExtractor:
                     existing_ids = {item.get("paper_id") for item in existing if isinstance(item, dict)}
             except Exception:
                 pass
+
+        paper_items = []
         for paper_dir in input_dir.iterdir():
             if not paper_dir.is_dir():
                 continue
@@ -425,20 +501,117 @@ class FullTextExtractor:
             chunks_files = list(paper_dir.glob("*_chunks.json"))
             if not chunks_files:
                 continue
-
             chunks = load_chunks(chunks_files[0])
-            result = self.extract_from_chunks(
-                chunks,
-                schema,
-                source_file=paper_dir.name,
-            )
-            outputs.append(
+            paper_items.append(
                 {
                     "paper_id": paper_dir.name,
-                    "schema": schema.name,
-                    **result,
+                    "source_file": paper_dir.name,
+                    "chunks": chunks,
                 }
             )
 
+        if not paper_items:
+            output_path.write_text(json.dumps(outputs, indent=2, ensure_ascii=False), encoding="utf-8")
+            return output_path
+
+        groups = self._get_groups(schema)
+        results_map: dict[str, dict[str, Any]] = {
+            item["paper_id"]: {
+                "paper_id": item["paper_id"],
+                "schema": schema.name,
+                "extraction": {},
+                "meta": {
+                    "source_file": item["source_file"],
+                    "schema": schema.name,
+                    "groups": {},
+                },
+            }
+            for item in paper_items
+        }
+
+        for group in groups:
+            group_fields = [schema.field_by_id(fid) for fid in group.fields]
+            field_specs = [f for f in group_fields if f is not None]
+            if not field_specs:
+                continue
+
+            model_name = self.config.group_models.get(group.group_id, self.config.model)
+            response_item_model = _build_group_model(field_specs, self.config.require_evidence)
+            BatchItem = create_model(
+                f"BatchItem_{group.group_id}",
+                paper_id=(str, ...),
+                **{f.id: (_field_type(f), None) for f in field_specs},
+                **({"evidence": (dict[str, str], None)} if self.config.require_evidence else {}),
+            )
+            BatchResponse = create_model(
+                f"BatchResponse_{group.group_id}",
+                items=(list[BatchItem], ...),
+            )
+
+            batch_size = max(1, self.config.batch_size)
+            for batch_start in range(0, len(paper_items), batch_size):
+                batch = paper_items[batch_start:batch_start + batch_size]
+                batch_payload = []
+                for item in batch:
+                    selected_chunks = _select_chunks(
+                        item["chunks"],
+                        section_priority=group.section_priority,
+                        max_tokens=self.config.max_tokens,
+                        include_tables=self.config.include_tables,
+                        include_table_tags=group.group_id in {"group2_data", "group4_eval"},
+                    )
+                    excerpt = "\n\n".join(c.text for c in selected_chunks)
+                    batch_payload.append(
+                        {
+                            "paper_id": item["paper_id"],
+                            "excerpt": excerpt,
+                            "chunk_ids": [c.id for c in selected_chunks],
+                            "token_estimate": sum(_estimate_tokens(c.text) for c in selected_chunks),
+                        }
+                    )
+
+                user_prompt = self._build_batch_prompt(group, batch_payload)
+                system_prompt = SYSTEM_PROMPT
+
+                try:
+                    client = self._client_for_group(group.group_id)
+                    completion = client.client.beta.chat.completions.parse(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        response_format=BatchResponse,
+                    )
+                    parsed = completion.choices[0].message.parsed
+                    group_items = parsed.model_dump().get("items", []) if isinstance(parsed, BaseModel) else []
+                except Exception as e:
+                    logger.error("Batch extraction failed for %s: %s", group.group_id, e)
+                    group_items = []
+
+                # Merge results
+                for item in batch_payload:
+                    entry = results_map[item["paper_id"]]
+                    entry["meta"]["groups"][group.group_id] = {
+                        "model": model_name,
+                        "chunk_ids": item["chunk_ids"],
+                        "token_estimate": item["token_estimate"],
+                    }
+                    if self.config.log_prompts and batch_size == 1:
+                        entry["meta"]["groups"][group.group_id]["prompt"] = {
+                            "system": system_prompt,
+                            "user": user_prompt,
+                        }
+
+                for extracted in group_items:
+                    paper_id = extracted.get("paper_id")
+                    if not paper_id or paper_id not in results_map:
+                        continue
+                    evidence = extracted.pop("evidence", None)
+                    results_map[paper_id]["extraction"].update(extracted)
+                    if evidence:
+                        results_map[paper_id]["meta"]["groups"][group.group_id]["evidence"] = evidence
+
+        outputs.extend(results_map.values())
         output_path.write_text(json.dumps(outputs, indent=2, ensure_ascii=False), encoding="utf-8")
         return output_path

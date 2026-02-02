@@ -123,6 +123,25 @@ Run LLM/SLM extraction on the cleaned chunks using your schema.
 ```bash
 nexus full-text-extract --input results/clean_extract --output results/full_text_extraction.json
 ```
+You can batch multiple papers per call and set group-specific models (cheap for groups 1–3, larger for group 4):
+```yaml
+full_text_extraction:
+  batch_size: 3
+  group_models:
+    group1_context: "gpt-5-nano"
+    group2_data: "gpt-5-nano"
+    group3_models: "gpt-5-nano"
+    group4_eval: "gpt-4o"
+```
+If you want to split providers (OpenRouter for small models, OpenAI for the heavier group), set:
+```yaml
+full_text_extraction:
+  group_clients:
+    group1_context: { base_url: "https://openrouter.ai/api/v1", api_key_env: "OPENROUTER_API_KEY" }
+    group2_data: { base_url: "https://openrouter.ai/api/v1", api_key_env: "OPENROUTER_API_KEY" }
+    group3_models: { base_url: "https://openrouter.ai/api/v1", api_key_env: "OPENROUTER_API_KEY" }
+    group4_eval: { base_url: "https://api.openai.com/v1", api_key_env: "OPENAI_API_KEY" }
+```
 
 ---
 

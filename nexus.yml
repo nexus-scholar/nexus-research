@@ -129,10 +129,27 @@ full_text_extraction:
     - conclusion
   include_tables: true
   model: "gpt-4o"
-  group_models: {}
+  group_models:
+    group1_context: "gpt-5-nano"
+    group2_data: "gpt-5-nano"
+    group3_models: "gpt-5-nano"
+    group4_eval: "gpt-4o"
+  group_clients:
+    group1_context:
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "OPENROUTER_API_KEY"
+    group2_data:
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "OPENROUTER_API_KEY"
+    group3_models:
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "OPENROUTER_API_KEY"
+    group4_eval:
+      base_url: "https://api.openai.com/v1"
+      api_key_env: "OPENAI_API_KEY"
   group_fields: {}
   require_evidence: false
-  batch_size: 1
+  batch_size: 3
   resume: true
   log_prompts: false
 

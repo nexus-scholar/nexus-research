@@ -289,6 +289,10 @@ class FullTextExtractionConfig(BaseModel):
         default_factory=dict,
         description="Override model per group id",
     )
+    group_clients: Dict[str, Dict[str, str]] = Field(
+        default_factory=dict,
+        description="Per-group client overrides (base_url, api_key_env)",
+    )
     group_fields: Dict[str, List[str]] = Field(
         default_factory=dict,
         description="Override field ids per group id",
