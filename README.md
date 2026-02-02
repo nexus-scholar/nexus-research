@@ -101,7 +101,8 @@ Convert PDFs to Markdown for analysis.
 ```bash
 nexus extract --tables --images
 ```
-For scientific extraction (clean text + LaTeX math + tables, no references/images):
+For scientific extraction (clean text + LaTeX math + tables, no references/images).
+You can override any defaults (e.g., disable math with `--no-math --no-math-ocr --no-inline-math`):
 ```bash
 nexus extract --scientific
 ```

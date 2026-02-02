@@ -85,17 +85,17 @@ def _process_single_pdf(args):
 )
 @click.option(
     "--images/--no-images",
-    default=False,
+    default=None,
     help="Extract images (slower).",
 )
 @click.option(
     "--math/--no-math",
-    default=False,
+    default=None,
     help="Extract math equations (slower).",
 )
 @click.option(
     "--tables/--no-tables",
-    default=True,
+    default=None,
     help="Extract tables.",
 )
 @click.option(
@@ -105,7 +105,7 @@ def _process_single_pdf(args):
 )
 @click.option(
     "--ocr/--no-ocr",
-    default=False,
+    default=None,
     help="Enable OCR on low-text pages.",
 )
 @click.option(
@@ -134,7 +134,7 @@ def _process_single_pdf(args):
 )
 @click.option(
     "--math-ocr/--no-math-ocr",
-    default=False,
+    default=None,
     help="OCR math regions into LaTeX (pix2tex).",
 )
 @click.option(
@@ -145,17 +145,17 @@ def _process_single_pdf(args):
 )
 @click.option(
     "--inline-math/--no-inline-math",
-    default=False,
+    default=None,
     help="Append LaTeX math blocks to text chunks.",
 )
 @click.option(
     "--merge-table-continuations/--no-merge-table-continuations",
-    default=True,
+    default=None,
     help="Merge multi-page tables with matching headers.",
 )
 @click.option(
     "--split-references/--no-split-references",
-    default=True,
+    default=None,
     help="Detect and split references section from body text.",
 )
 @click.option(
@@ -198,15 +198,27 @@ def extract(
     """
     print_header("Nexus Extract", "PDF to Structured Text")
 
+    def _resolve(value, default):
+        return default if value is None else value
+
     if scientific:
-        images = False
-        math = True
-        tables = True
-        ocr = True
-        math_ocr = True
-        inline_math = True
-        merge_table_continuations = True
-        split_references = False
+        images = _resolve(images, False)
+        math = _resolve(math, True)
+        tables = _resolve(tables, True)
+        ocr = _resolve(ocr, True)
+        math_ocr = _resolve(math_ocr, True)
+        inline_math = _resolve(inline_math, True)
+        merge_table_continuations = _resolve(merge_table_continuations, True)
+        split_references = _resolve(split_references, False)
+    else:
+        images = _resolve(images, False)
+        math = _resolve(math, False)
+        tables = _resolve(tables, True)
+        ocr = _resolve(ocr, False)
+        math_ocr = _resolve(math_ocr, False)
+        inline_math = _resolve(inline_math, False)
+        merge_table_continuations = _resolve(merge_table_continuations, True)
+        split_references = _resolve(split_references, True)
 
     if not input_dir.exists():
         print_error(f"Input directory not found: {input_dir}")
