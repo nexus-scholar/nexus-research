@@ -94,12 +94,15 @@ screener:
   # Used only when include_groups is empty.
   include_patterns: []
   exclude_patterns:
-    - "weed"
-    - "insect"
-    - "pest"
+    - "weed detection"
+    - "weed control"
+    - "pest detection"
+    - "pest control"
+    - "pest infestation"
+    - "insect pest"
     - "aphid"
-    - "virus"
-    - "fungus"
+    - "aphids"
+    - "virus detection"
     - "remote sensing"
     - "hyperspectral imaging"
     - "hyperspectral"
@@ -107,14 +110,31 @@ screener:
     - "uav"
     - "drone"
     - "aerial"
-    - "weed detection"
-    - "weed control"
-    - "pest detection"
-    - "pest infestation"
-    - "insect pest"
     - "yield prediction"
   # Optional per-layer model names; last one is reused for remaining layers.
   models: []
+
+# Full-Text Extraction
+# --------------------
+full_text_extraction:
+  schema_path: "full_text_extraction_schema.yaml"
+  max_tokens: 6000
+  section_priority:
+    - methods
+    - results
+    - discussion
+    - introduction
+    - abstract
+    - related_work
+    - conclusion
+  include_tables: true
+  model: "gpt-4o"
+  group_models: {}
+  group_fields: {}
+  require_evidence: false
+  batch_size: 1
+  resume: true
+  log_prompts: false
 
 # Output Configuration
 # ---------------------

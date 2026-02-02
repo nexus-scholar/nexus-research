@@ -43,6 +43,7 @@ from .table_extractor import (
     TableExtractionResult,
 )
 from .pipeline import process_pdf_to_chunks, process_directory, ProcessedDocument
+from .full_text_extractor import FullTextExtractor, load_schema
 
 __version__ = "0.1.0"
 
@@ -92,4 +93,6 @@ __all__ = [
     "process_pdf_to_chunks",
     "process_directory",
     "ProcessedDocument",
+    "FullTextExtractor",
+    "load_schema",
 ]

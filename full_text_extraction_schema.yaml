@@ -1,0 +1,166 @@
+name: plant_disease_deep_learning_full_text_schema_no_biblio
+description: >
+  Schema for extracting detailed scientific information from full‑text
+  articles on deep‑learning‑based plant disease detection, excluding
+  bibliographic details.  For each field, return a concise value or 'NR'
+  if the information is not reported in the paper.  Lists may be empty
+  if no instances are provided.  Use the paper’s full text (introduction,
+  methods, results and discussion) when available; otherwise extract
+  what you can from the abstract.
+
+fields:
+  # Research context
+  - id: research_objective
+    description: Primary aim or research question addressed by the study.
+    type: string
+  - id: hypotheses
+    description: Stated hypotheses, if any.
+    type: string
+
+  # Task and scope
+  - id: task_type
+    description: Primary computer‑vision task (classification, detection, segmentation, severity estimation, or other).
+    type: string
+  - id: crop_species
+    description: Names of crop species studied (e.g. tomato, rice, wheat). Provide as a list.
+    type: list of strings
+  - id: disease_names
+    description: Names of plant diseases or stress conditions addressed in the study.
+    type: list of strings
+
+  # Data and datasets
+  - id: datasets
+    description: >
+      List of datasets used, with details for each.  Include the dataset name,
+      whether images were captured in the lab or field (domain), the number of
+      samples, and the number of classes.  Use 'NR' where information is not
+      reported.
+    type: list of objects
+    object_fields:
+      name: string
+      domain: string  # lab, field, mixed, or NR
+      samples: integer
+      classes: integer
+  - id: data_collection
+    description: >
+      Description of how data were collected, including imaging equipment
+      (camera type, resolution), lighting conditions, and any preprocessing or
+      annotation performed by the authors.
+    type: string
+  - id: train_test_split
+    description: >
+      Description of how the data were split into training, validation and
+      test sets (e.g., percentages, cross‑validation protocol, leave‑one‑out).
+    type: string
+  - id: augmentation_methods
+    description: Data augmentation strategies applied during training (e.g., flips, rotations, colour jitter, GAN‑based synthesis).
+    type: list of strings
+
+  # Models and training
+  - id: architectures
+    description: >
+      List of deep learning architectures used (e.g., ResNet50, VGG16,
+      EfficientNet‑B4, Swin Transformer, ViT).  Indicate whether each model
+      was pretrained and any variants or custom modifications.
+    type: list of objects
+    object_fields:
+      architecture: string
+      pretrained: boolean
+      variant: string
+  - id: training_details
+    description: >
+      Training hyperparameters such as optimizer, learning rate, number of
+      epochs, batch size, and any regularization techniques (dropout,
+      weight decay, early stopping).
+    type: object
+    object_fields:
+      optimizer: string
+      learning_rate: string
+      epochs: integer
+      batch_size: integer
+      regularization: string
+  - id: domain_shift_handling
+    description: >
+      Techniques used to address domain shift, dataset bias or few‑shot
+      learning (e.g., cross‑dataset validation, domain adaptation,
+      domain generalization, meta‑learning, self‑supervised or semi‑supervised
+      learning).  Include multiple techniques if applicable.
+    type: list of strings
+  - id: model_compression
+    description: >
+      Methods employed to reduce model complexity or enable edge deployment,
+      such as pruning, quantization, low‑rank factorization, knowledge
+      distillation, network slimming or other compression techniques.
+    type: list of strings
+  - id: generative_augmentation
+    description: >
+      Use of generative models (GANs, diffusion, cycle‑consistency networks) or
+      other synthetic augmentation techniques to expand the training data.
+    type: list of strings
+  - id: data_centric_methods
+    description: >
+      Strategies for improving data quality, including active learning,
+      uncertainty sampling, label noise handling, dataset curation or
+      annotation processes.
+    type: list of strings
+
+  # Evaluation and results
+  - id: evaluation_metrics
+    description: >
+      Key performance metrics reported in the paper.  Capture accuracy,
+      precision, recall, F1‑score, mAP (for detection), IoU (for segmentation),
+      cross‑dataset performance and any domain‑shift related metrics.
+    type: object
+    object_fields:
+      accuracy: float
+      precision: float
+      recall: float
+      f1_score: float
+      mAP: float
+      IoU: float
+      cross_dataset: float
+      others: string
+  - id: cross_dataset_evaluation
+    description: >
+      Details of any cross‑dataset or cross‑domain evaluation performed,
+      including the datasets involved and the resulting metrics.
+    type: string
+  - id: inference_performance
+    description: >
+      Reported inference speed (throughput or latency), memory footprint,
+      and model size when available, particularly for edge devices.
+    type: object
+    object_fields:
+      latency_ms: float
+      throughput_fps: float
+      model_size_mb: float
+      memory_usage_mb: float
+  - id: hardware_deployment
+    description: >
+      Hardware used for training and inference (e.g., GPU/CPU type,
+      Jetson, Raspberry Pi, TPU, FPGA, smartphone) and any deployment
+      environment details (mobile app, web service, robotics platform).
+    type: string
+
+  # Interpretability and quality
+  - id: explainability_methods
+    description: >
+      Interpretability techniques applied (e.g., Grad‑CAM, SHAP, LIME,
+      attention maps) and any insights or visualizations provided.
+    type: list of strings
+  - id: limitations
+    description: Limitations or challenges acknowledged by the authors (e.g., small sample size, dataset bias, overfitting).
+    type: string
+  - id: future_work
+    description: Future research directions or recommendations suggested in the paper.
+    type: string
+  - id: reproducibility
+    description: >
+      Information on code and data availability, including GitHub repositories,
+      dataset links, and any supplementary material that enables reproducibility.
+    type: string
+  - id: peer_review_status
+    description: >
+      Whether the paper is peer‑reviewed and, if applicable, confirmation
+      that it appears in a Q1 journal.  Provide the Q1 ranking source if mentioned.
+    type: string

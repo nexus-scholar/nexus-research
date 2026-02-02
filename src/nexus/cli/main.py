@@ -92,6 +92,7 @@ from nexus.cli.validate import validate
 from nexus.cli.screen import screen
 from nexus.cli.fetch import fetch
 from nexus.cli.extract import extract
+from nexus.cli.full_text_extract import full_text_extract
 from nexus.cli.login import login
 from nexus.cli.analyze import analyze
 from nexus.cli.visualize import visualize
@@ -108,6 +109,7 @@ cli.add_command(screen)
 cli.add_command(rank)
 cli.add_command(fetch)
 cli.add_command(extract)
+cli.add_command(full_text_extract)
 cli.add_command(login)
 cli.add_command(analyze)
 cli.add_command(visualize)

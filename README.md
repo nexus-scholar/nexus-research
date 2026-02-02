@@ -118,6 +118,12 @@ nexus visualize
 nexus synthesize
 ```
 
+**Step 7: Full-Text Field Extraction (Schema-Driven)**
+Run LLM/SLM extraction on the cleaned chunks using your schema.
+```bash
+nexus full-text-extract --input results/clean_extract --output results/full_text_extraction.json
+```
+
 ---
 
 ## 📂 Architecture

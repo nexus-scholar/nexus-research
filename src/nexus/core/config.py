@@ -259,6 +259,48 @@ class ScreenerConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class FullTextExtractionConfig(BaseModel):
+    """Configuration for schema-driven full-text extraction."""
+
+    schema_path: Path = Field(
+        default=Path("full_text_extraction_schema.yaml"),
+        description="Path to extraction schema YAML",
+    )
+    max_tokens: int = Field(
+        default=6000,
+        ge=500,
+        description="Approximate max tokens to include per group",
+    )
+    section_priority: List[str] = Field(
+        default_factory=lambda: [
+            "methods",
+            "results",
+            "discussion",
+            "introduction",
+            "abstract",
+            "related_work",
+            "conclusion",
+        ],
+        description="Default section priority for chunk selection",
+    )
+    include_tables: bool = Field(default=True, description="Include table chunks in extraction")
+    model: str = Field(default="gpt-4o", description="Default extraction model")
+    group_models: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Override model per group id",
+    )
+    group_fields: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Override field ids per group id",
+    )
+    require_evidence: bool = Field(default=False, description="Include evidence snippets")
+    batch_size: int = Field(default=1, ge=1, description="Batch size for extraction")
+    resume: bool = Field(default=True, description="Skip already extracted papers")
+    log_prompts: bool = Field(default=False, description="Log prompts/responses for audit")
+
+    model_config = ConfigDict(extra="allow")
+
+
 class SLRConfig(BaseModel):
     """Main configuration for Simple SLR."""
 
@@ -280,6 +322,9 @@ class SLRConfig(BaseModel):
     )
     screener: ScreenerConfig = Field(
         default_factory=ScreenerConfig, description="Screener settings"
+    )
+    full_text_extraction: FullTextExtractionConfig = Field(
+        default_factory=FullTextExtractionConfig, description="Full-text extraction settings"
     )
     output: OutputConfig = Field(default_factory=OutputConfig, description="Output settings")
 
