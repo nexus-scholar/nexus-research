@@ -130,10 +130,10 @@ full_text_extraction:
   include_tables: true
   model: "gpt-4o"
   group_models:
-    group1_context: "gpt-5-nano"
-    group2_data: "gpt-5-nano"
-    group3_models: "gpt-5-nano"
-    group4_eval: "gpt-4o"
+    group1_context: "google/gemini-2.0-flash-001"
+    group2_data: "google/gemini-2.0-flash-001"
+    group3_models: "google/gemini-2.0-flash-001"
+    group4_eval: "openai/gpt-4o-mini-2024-07-18"
   group_clients:
     group1_context:
       base_url: "https://openrouter.ai/api/v1"
@@ -145,8 +145,8 @@ full_text_extraction:
       base_url: "https://openrouter.ai/api/v1"
       api_key_env: "OPENROUTER_API_KEY"
     group4_eval:
-      base_url: "https://api.openai.com/v1"
-      api_key_env: "OPENAI_API_KEY"
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "OPENROUTER_API_KEY"
   group_fields: {}
   require_evidence: false
   batch_size: 3

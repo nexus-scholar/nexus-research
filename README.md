@@ -142,6 +142,14 @@ full_text_extraction:
     group3_models: { base_url: "https://openrouter.ai/api/v1", api_key_env: "OPENROUTER_API_KEY" }
     group4_eval: { base_url: "https://api.openai.com/v1", api_key_env: "OPENAI_API_KEY" }
 ```
+Dry-run to preview token usage without spending credits:
+```bash
+nexus full-text-extract --input results/clean_extract --output results/full_text_extraction.json --dry-run
+```
+Rerun only a failed group (e.g., just group 4) without repeating groups 1–3:
+```bash
+nexus full-text-extract --input results/clean_extract --output results/full_text_extraction.json --groups group4_eval
+```
 
 ---
 

@@ -293,21 +293,32 @@ def _select_chunks(
     return selected
 
 
+def _type_from_schema_name(type_name: str) -> Any:
+    normalized = type_name.strip().lower()
+    if normalized == "string":
+        return str
+    if normalized == "integer":
+        return int | str
+    if normalized == "float":
+        return float | int | str
+    if normalized == "boolean":
+        return bool | str
+    return Any
+
+
 def _object_model_from_field(field: FieldSpec) -> type[BaseModel]:
     object_fields = field.object_fields or {}
     fields: dict[str, tuple[Any, Any]] = {}
-    for key in object_fields.keys():
-        fields[key] = (Any, None)
+    for key, type_name in object_fields.items():
+        fields[key] = (_type_from_schema_name(type_name), None)
+    if not fields:
+        fields["value"] = (str | int | float | bool | Any, None)
     return create_model(f"{field.id.title().replace('_', '')}Model", **fields)
 
 
 def _field_type(field: FieldSpec) -> Any:
-    if field.type == "string":
-        return str
-    if field.type == "integer":
-        return int | str
-    if field.type == "float":
-        return float | int | str
+    if field.type in {"string", "integer", "float", "boolean"}:
+        return _type_from_schema_name(field.type)
     if field.type == "list of strings":
         return list[str] | str
     if field.type == "list of objects":
@@ -355,8 +366,13 @@ class FullTextExtractor:
         base_url = override.get("base_url") if isinstance(override, dict) else None
         return LLMClient(api_key=api_key, base_url=base_url, model=self.config.model)
 
-    def _get_groups(self, schema: SchemaSpec) -> list[ExtractionGroup]:
+    def _get_groups(
+        self,
+        schema: SchemaSpec,
+        group_ids: Iterable[str] | None = None,
+    ) -> list[ExtractionGroup]:
         groups: list[ExtractionGroup] = []
+        allowed = {g.strip() for g in group_ids} if group_ids else None
         group_definitions = DEFAULT_GROUPS
         if self.config.group_fields:
             group_definitions = {
@@ -368,6 +384,8 @@ class FullTextExtractor:
             }
 
         for group_id, data in group_definitions.items():
+            if allowed is not None and group_id not in allowed:
+                continue
             fields = [f for f in data["fields"] if schema.field_by_id(f)]
             if not fields:
                 continue
@@ -380,12 +398,137 @@ class FullTextExtractor:
             )
         return groups
 
+    def _collect_paper_items(
+        self,
+        input_dir: Path,
+        output_path: Path | None = None,
+        required_groups: Iterable[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        existing_ids = set()
+        existing_groups: dict[str, set[str]] = {}
+        if output_path and output_path.exists() and self.config.resume:
+            try:
+                existing = json.loads(output_path.read_text(encoding="utf-8"))
+                if isinstance(existing, list):
+                    existing_ids = {
+                        item.get("paper_id")
+                        for item in existing
+                        if isinstance(item, dict) and item.get("paper_id")
+                    }
+                    for item in existing:
+                        if not isinstance(item, dict):
+                            continue
+                        paper_id = item.get("paper_id")
+                        if not paper_id:
+                            continue
+                        groups = (
+                            item.get("meta", {})
+                            .get("groups", {})
+                        )
+                        if isinstance(groups, dict):
+                            existing_groups[paper_id] = set(groups.keys())
+            except Exception:
+                pass
+
+        required = {g.strip() for g in required_groups} if required_groups else None
+
+        items = []
+        for paper_dir in input_dir.iterdir():
+            if not paper_dir.is_dir():
+                continue
+            if self.config.resume and paper_dir.name in existing_ids:
+                if required:
+                    present = existing_groups.get(paper_dir.name, set())
+                    if required.issubset(present):
+                        continue
+                else:
+                    continue
+            chunks_files = list(paper_dir.glob("*_chunks.json"))
+            if not chunks_files:
+                continue
+            chunks = load_chunks(chunks_files[0])
+            items.append(
+                {
+                    "paper_id": paper_dir.name,
+                    "source_file": paper_dir.name,
+                    "chunks": chunks,
+                }
+            )
+        return items
+
+    def _build_batches(
+        self,
+        paper_items: list[dict[str, Any]],
+        schema: SchemaSpec,
+        group_ids: Iterable[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        groups = self._get_groups(schema, group_ids=group_ids)
+        batches: list[dict[str, Any]] = []
+
+        for group in groups:
+            group_fields = [schema.field_by_id(fid) for fid in group.fields]
+            field_specs = [f for f in group_fields if f is not None]
+            if not field_specs:
+                continue
+
+            model_name = self.config.group_models.get(group.group_id, self.config.model)
+            batch_size = max(1, self.config.batch_size)
+
+            for batch_start in range(0, len(paper_items), batch_size):
+                batch = paper_items[batch_start:batch_start + batch_size]
+                batch_payload = []
+                for item in batch:
+                    selected_chunks = _select_chunks(
+                        item["chunks"],
+                        section_priority=group.section_priority,
+                        max_tokens=self.config.max_tokens,
+                        include_tables=self.config.include_tables,
+                        include_table_tags=group.group_id in {"group2_data", "group4_eval"},
+                    )
+                    excerpt = "\n\n".join(c.text for c in selected_chunks)
+                    batch_payload.append(
+                        {
+                            "paper_id": item["paper_id"],
+                            "excerpt": excerpt,
+                            "chunk_ids": [c.id for c in selected_chunks],
+                            "token_estimate": sum(_estimate_tokens(c.text) for c in selected_chunks),
+                        }
+                    )
+
+                user_prompt = self._build_batch_prompt(group, batch_payload)
+                batches.append(
+                    {
+                        "group_id": group.group_id,
+                        "model": model_name,
+                        "payload": batch_payload,
+                        "prompt": user_prompt,
+                        "prompt_tokens": _estimate_tokens(user_prompt),
+                    }
+                )
+
+        return batches
+
+    def plan_batches(
+        self,
+        input_dir: Path,
+        output_path: Path | None = None,
+        group_ids: Iterable[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        schema = load_schema(self.config.schema_path)
+        paper_items = self._collect_paper_items(
+            input_dir,
+            output_path,
+            required_groups=group_ids,
+        )
+        return self._build_batches(paper_items, schema, group_ids=group_ids)
+
     def extract_from_chunks(
         self,
         chunks: list[Chunk],
         schema: SchemaSpec,
         *,
         source_file: str | None = None,
+        group_ids: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         results: dict[str, Any] = {}
         meta: dict[str, Any] = {
@@ -394,7 +537,7 @@ class FullTextExtractor:
             "groups": {},
         }
 
-        groups = self._get_groups(schema)
+        groups = self._get_groups(schema, group_ids=group_ids)
         for group in groups:
             group_fields = [schema.field_by_id(fid) for fid in group.fields]
             field_specs = [f for f in group_fields if f is not None]
@@ -477,46 +620,39 @@ class FullTextExtractor:
         self,
         input_dir: Path,
         output_path: Path,
+        group_ids: Iterable[str] | None = None,
     ) -> Path:
         schema = load_schema(self.config.schema_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         outputs: list[dict[str, Any]] = []
+        existing_map: dict[str, dict[str, Any]] = {}
         existing_ids = set()
         if output_path.exists() and self.config.resume:
             try:
                 existing = json.loads(output_path.read_text(encoding="utf-8"))
                 if isinstance(existing, list):
                     outputs.extend(existing)
-                    existing_ids = {item.get("paper_id") for item in existing if isinstance(item, dict)}
+                    for item in existing:
+                        if isinstance(item, dict) and item.get("paper_id"):
+                            existing_ids.add(item.get("paper_id"))
+                            existing_map[item.get("paper_id")] = item
             except Exception:
                 pass
 
-        paper_items = []
-        for paper_dir in input_dir.iterdir():
-            if not paper_dir.is_dir():
-                continue
-            if self.config.resume and paper_dir.name in existing_ids:
-                continue
-            chunks_files = list(paper_dir.glob("*_chunks.json"))
-            if not chunks_files:
-                continue
-            chunks = load_chunks(chunks_files[0])
-            paper_items.append(
-                {
-                    "paper_id": paper_dir.name,
-                    "source_file": paper_dir.name,
-                    "chunks": chunks,
-                }
-            )
+        paper_items = self._collect_paper_items(
+            input_dir,
+            output_path,
+            required_groups=group_ids,
+        )
 
         if not paper_items:
             output_path.write_text(json.dumps(outputs, indent=2, ensure_ascii=False), encoding="utf-8")
             return output_path
 
-        groups = self._get_groups(schema)
         results_map: dict[str, dict[str, Any]] = {
-            item["paper_id"]: {
+            item["paper_id"]: existing_map.get(item["paper_id"])
+            or {
                 "paper_id": item["paper_id"],
                 "schema": schema.name,
                 "extraction": {},
@@ -528,90 +664,76 @@ class FullTextExtractor:
             }
             for item in paper_items
         }
+        for paper_id, entry in results_map.items():
+            if paper_id not in existing_map:
+                outputs.append(entry)
+                existing_map[paper_id] = entry
+            entry.setdefault("extraction", {})
+            entry.setdefault("meta", {"source_file": paper_id, "schema": schema.name, "groups": {}})
+            entry["meta"].setdefault("groups", {})
+            entry["meta"]["schema"] = schema.name
 
-        for group in groups:
+        batches = self._build_batches(paper_items, schema, group_ids=group_ids)
+        group_map = {group.group_id: group for group in self._get_groups(schema, group_ids=group_ids)}
+        for batch in batches:
+            group_id = batch["group_id"]
+            group = group_map.get(group_id)
+            if not group:
+                continue
             group_fields = [schema.field_by_id(fid) for fid in group.fields]
             field_specs = [f for f in group_fields if f is not None]
-            if not field_specs:
-                continue
-
-            model_name = self.config.group_models.get(group.group_id, self.config.model)
-            response_item_model = _build_group_model(field_specs, self.config.require_evidence)
             BatchItem = create_model(
-                f"BatchItem_{group.group_id}",
+                f"BatchItem_{group_id}",
                 paper_id=(str, ...),
                 **{f.id: (_field_type(f), None) for f in field_specs},
                 **({"evidence": (dict[str, str], None)} if self.config.require_evidence else {}),
             )
             BatchResponse = create_model(
-                f"BatchResponse_{group.group_id}",
+                f"BatchResponse_{group_id}",
                 items=(list[BatchItem], ...),
             )
 
-            batch_size = max(1, self.config.batch_size)
-            for batch_start in range(0, len(paper_items), batch_size):
-                batch = paper_items[batch_start:batch_start + batch_size]
-                batch_payload = []
-                for item in batch:
-                    selected_chunks = _select_chunks(
-                        item["chunks"],
-                        section_priority=group.section_priority,
-                        max_tokens=self.config.max_tokens,
-                        include_tables=self.config.include_tables,
-                        include_table_tags=group.group_id in {"group2_data", "group4_eval"},
-                    )
-                    excerpt = "\n\n".join(c.text for c in selected_chunks)
-                    batch_payload.append(
-                        {
-                            "paper_id": item["paper_id"],
-                            "excerpt": excerpt,
-                            "chunk_ids": [c.id for c in selected_chunks],
-                            "token_estimate": sum(_estimate_tokens(c.text) for c in selected_chunks),
-                        }
-                    )
+            system_prompt = SYSTEM_PROMPT
+            user_prompt = batch["prompt"]
+            model_name = batch["model"]
 
-                user_prompt = self._build_batch_prompt(group, batch_payload)
-                system_prompt = SYSTEM_PROMPT
+            try:
+                client = self._client_for_group(group_id)
+                completion = client.client.beta.chat.completions.parse(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format=BatchResponse,
+                )
+                parsed = completion.choices[0].message.parsed
+                group_items = parsed.model_dump().get("items", []) if isinstance(parsed, BaseModel) else []
+            except Exception as e:
+                logger.error("Batch extraction failed for %s: %s", group_id, e)
+                group_items = []
 
-                try:
-                    client = self._client_for_group(group.group_id)
-                    completion = client.client.beta.chat.completions.parse(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        response_format=BatchResponse,
-                    )
-                    parsed = completion.choices[0].message.parsed
-                    group_items = parsed.model_dump().get("items", []) if isinstance(parsed, BaseModel) else []
-                except Exception as e:
-                    logger.error("Batch extraction failed for %s: %s", group.group_id, e)
-                    group_items = []
-
-                # Merge results
-                for item in batch_payload:
-                    entry = results_map[item["paper_id"]]
-                    entry["meta"]["groups"][group.group_id] = {
-                        "model": model_name,
-                        "chunk_ids": item["chunk_ids"],
-                        "token_estimate": item["token_estimate"],
+            for item in batch["payload"]:
+                entry = results_map[item["paper_id"]]
+                entry["meta"]["groups"][group_id] = {
+                    "model": model_name,
+                    "chunk_ids": item["chunk_ids"],
+                    "token_estimate": item["token_estimate"],
+                }
+                if self.config.log_prompts and len(batch["payload"]) == 1:
+                    entry["meta"]["groups"][group_id]["prompt"] = {
+                        "system": system_prompt,
+                        "user": user_prompt,
                     }
-                    if self.config.log_prompts and batch_size == 1:
-                        entry["meta"]["groups"][group.group_id]["prompt"] = {
-                            "system": system_prompt,
-                            "user": user_prompt,
-                        }
 
-                for extracted in group_items:
-                    paper_id = extracted.get("paper_id")
-                    if not paper_id or paper_id not in results_map:
-                        continue
-                    evidence = extracted.pop("evidence", None)
-                    results_map[paper_id]["extraction"].update(extracted)
-                    if evidence:
-                        results_map[paper_id]["meta"]["groups"][group.group_id]["evidence"] = evidence
+            for extracted in group_items:
+                paper_id = extracted.get("paper_id")
+                if not paper_id or paper_id not in results_map:
+                    continue
+                evidence = extracted.pop("evidence", None)
+                results_map[paper_id]["extraction"].update(extracted)
+                if evidence:
+                    results_map[paper_id]["meta"]["groups"][group_id]["evidence"] = evidence
 
-        outputs.extend(results_map.values())
         output_path.write_text(json.dumps(outputs, indent=2, ensure_ascii=False), encoding="utf-8")
         return output_path
