@@ -1,5 +1,9 @@
 # Nexus: AI Research Assistant
 
+> **Status:** Legacy Python research-engine prototype.
+>
+> This repository documents an earlier Nexus Scholar direction for systematic-literature-review automation in Python. It is kept public as predecessor evidence for provider search, deduplication, screening, PDF extraction, and workflow ideas that informed the current Laravel/PHP Nexus Scholar stack. Current active package work lives in [`nexus-scholar/core`](https://github.com/nexus-scholar/core), [`nexus-scholar/nexus-cli`](https://github.com/nexus-scholar/nexus-cli), and [`nexus-scholar/nexus-web`](https://github.com/nexus-scholar/nexus-web).
+
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)]()
